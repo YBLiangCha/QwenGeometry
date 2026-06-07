@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `candidate_signal_type_fields_v1`
+- Current GitHub source head: `candidate_signal_row_type_inference_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -137,7 +137,29 @@ changes. Tags are the practical version identifiers for this workspace.
 - Hard-negative rows: 159 total, 144 train, 15 eval; reasons are 111 `point_too_close` and 48 `point_too_far`.
 - Purpose: let us mine verifier-backed aux-construction signal from long-running partial benches instead of waiting for all 16 problems before any data can be inspected.
 
+### `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_typed_v1`
+
+- Output: `data/staged_1m_pruned_v2/candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_typed_v1`
+- Built from the same running v3 event directory with `candidate_signal_row_type_inference_v1`, without touching the active benchmark process.
+- Snapshot time: 2026-06-07 22:36 +0800, while `translated_imo_2008_p1a` was still in progress.
+- Positive candidate SFT rows: 69 total, 63 train, 6 eval; counts include 68 `ddar_progress_positive` rows and 1 `candidate_solved` row.
+- Hard-negative rows: 305 total, 275 train, 30 eval; reasons are 237 `point_too_close` and 68 `point_too_far`.
+- Positive train construction types top: `on_circum`: 8, `on_circle`: 7, `on_bline+on_line`: 6, `eqangle3`: 6.
+- Hard-negative train construction types top: `on_line+on_line`: 126, `on_bline+on_line`: 42, `eqangle3`: 32, `on_circum+on_line`: 25.
+- Purpose: produce an immediately usable typed signal snapshot for construction-family balancing and value/reranker auditing.
+
 ## Next Candidate-Quality Fixes
+
+### `candidate_signal_row_type_inference_v1`
+
+- Candidate signal row builders now infer `candidate_construction_type` when
+  older event files do not contain it.
+- For valid candidates, the type is inferred from `translation`; for invalid
+  PointTooClose/PointTooFar hard negatives, the type is inferred from the raw
+  DSL `target` using the lightweight DSL-to-constructive translator.
+- Purpose: make partial datasets from currently-running old-format benchmarks
+  useful for construction-family sampling and hard-negative analysis without
+  waiting for a fresh run with richer event fields.
 
 ### `candidate_signal_type_fields_v1`
 

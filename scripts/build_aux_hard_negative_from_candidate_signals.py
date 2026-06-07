@@ -14,6 +14,23 @@ def safe_name(name: str) -> str:
   return re.sub(r'[^A-Za-z0-9_.-]+', '_', name or 'problem').strip('_')
 
 
+def inferred_construction_type(event: dict[str, Any]) -> str | None:
+  if event.get('candidate_construction_type'):
+    return event.get('candidate_construction_type')
+  try:
+    import qwen_ag_search as qs  # pylint: disable=import-outside-toplevel
+
+    translation = str(event.get('translation') or '').strip()
+    if translation and not translation.startswith('ERROR:'):
+      return qs.construction_type_key(translation)
+    target = str(event.get('target') or '').strip()
+    if target:
+      return qs.construction_type_key(qs.dsl_to_constructive_candidate(target))
+  except Exception:  # pylint: disable=broad-except
+    return None
+  return None
+
+
 def split_for_problem(problem: str, eval_mod: int) -> str:
   if eval_mod <= 0:
     return 'train'
@@ -65,7 +82,7 @@ def row_from_event(event: dict[str, Any], path: Path, line_no: int) -> dict[str,
       'prompt': prompt,
       'target': target,
       'candidate_translation': event.get('translation'),
-      'candidate_construction_type': event.get('candidate_construction_type'),
+      'candidate_construction_type': inferred_construction_type(event),
       'candidate_source': event.get('candidate_source') or event.get('source') or 'lm',
       'verdict': event.get('reason'),
       'depth': event.get('depth'),

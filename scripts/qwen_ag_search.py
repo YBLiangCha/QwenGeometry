@@ -947,6 +947,7 @@ def _candidate_value_tokens(record: dict[str, Any]) -> list[str]:
   for name in type_key.split('+'):
     if name and name != 'unknown':
       tokens.append('type=' + name)
+  add_candidate_value_feature(tokens, 'type_combo', type_key)
   error = candidate_value_error_key(translation)
   if error == 'not_error':
     error = candidate_value_error_key(str(record.get('candidate_ddar_error') or ''))

@@ -107,6 +107,17 @@ def split_for_problem(problem: str, eval_mod: int) -> str:
   return 'eval' if sum(problem.encode('utf-8')) % eval_mod == 0 else 'train'
 
 
+def inferred_construction_type(qs: Any, raw: str, translation: str) -> str:
+  if translation and not translation.startswith('ERROR:'):
+    return qs.construction_type_key(translation)
+  try:
+    if raw:
+      return qs.construction_type_key(qs.dsl_to_constructive_candidate(raw))
+  except Exception:  # pylint: disable=broad-except
+    pass
+  return 'error'
+
+
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser()
   parser.add_argument('--events_dir', required=True)
@@ -243,12 +254,8 @@ def main() -> None:
             'depth': event.get('depth'),
             'raw': raw,
             'translation': translation,
-            'source': event.get('source') or 'lm',
-            'construction_type': (
-                qs.construction_type_key(translation)
-                if not translation.startswith('ERROR:')
-                else 'error'
-            ),
+            'source': event.get('source') or event.get('candidate_source') or 'lm',
+            'construction_type': inferred_construction_type(qs, raw, translation),
             'label': label,
             'reason': reason,
             'problem_solved': solved,

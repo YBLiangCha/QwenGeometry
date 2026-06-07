@@ -62,6 +62,7 @@ def tokens_for_row(row: dict[str, Any]) -> list[str]:
   for name in construction_type.split('+'):
     if name and name != 'unknown':
       tokens.append('type=' + name)
+  add_prefixed_token(tokens, 'type_combo', construction_type)
   error = classify_error(translation)
   if error == 'not_error':
     error = classify_error(str(row.get('candidate_ddar_error') or ''))

@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `template_initial_backfill_source_v1`
+- Current GitHub source head: `candidate_value_data_type_inference_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -37,6 +37,17 @@ changes. Tags are the practical version identifiers for this workspace.
 - Main observed bottleneck: canonical duplicate collapse remained very high; several problems were DDAR-timeout blocked or made symbolic progress in the wrong direction.
 
 ## Value Models
+
+### `value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_typed_v1`
+
+- Output: `data/staged_1m_pruned_v2/value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_typed_v1/candidate_value_rows.jsonl`
+- Built from the running v3 partial event logs with `candidate_value_data_type_inference_v1`.
+- Snapshot time: 2026-06-07 22:50 +0800, while `translated_imo_2008_p1a` was still in progress.
+- Rows: 5802 total, 114 positive, 5688 negative.
+- Positive reasons: 113 `ddar_progress_positive`, 1 `solved_aux`.
+- Main negative reasons: 2670 `valid_nonwinning`, 2079 `valid_but_unsolved`, 409 `point_too_close`, 395 `other_error`, 88 `point_too_far`.
+- Invalid candidate construction types are now visible; top invalid types include `on_line+on_line`: 320, `eqangle3`: 152, `on_circum`: 121, `on_pline`: 104, `on_bline+on_line`: 52.
+- Purpose: provide a typed value/reranker training snapshot where invalid and hard-negative candidates retain construction-family information.
 
 ### `v5_timeout_hardneg_features_v1_plus_v3`
 
@@ -149,6 +160,16 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: produce an immediately usable typed signal snapshot for construction-family balancing and value/reranker auditing.
 
 ## Next Candidate-Quality Fixes
+
+### `candidate_value_data_type_inference_v1`
+
+- `scripts/build_candidate_value_data.py` now infers `construction_type` for
+  invalid candidates from raw DSL `raw` text when `translation` is an `ERROR`.
+- `scripts/train_candidate_value_model.py` and online scorer tokens now include
+  `type_combo=...` in addition to per-construction `type=...` tokens.
+- Purpose: let the value/reranker model learn construction-combination signals
+  for PointTooClose/PointTooFar/invalid candidates, rather than collapsing them
+  into the generic `error` construction bucket.
 
 ### `template_initial_backfill_source_v1`
 

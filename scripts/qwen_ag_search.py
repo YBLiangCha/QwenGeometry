@@ -69,6 +69,9 @@ _HIGH_VALUE_CONSTRUCTION_TYPES = {
     'on_aline2',
     'on_circum',
 }
+_CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG = (
+    set(_CONSTRUCTIVE_ARG_ARITY) - {'eqangle3'}
+)
 _CONSTRAINED_PROMPT_PREFIXES = ('', 'C', 'O', 'P', 'T', 'D', '^')
 _DSL_TOKEN_CHARS = set(
     'abcdefghijklmnopqrstuvwxyz'
@@ -406,7 +409,10 @@ def _word_matches_expected(token: str, expected: set[str], allow_prefix: bool) -
 
 
 def _parse_constrained_prefix(
-    point: str, tokens: list[str], has_semicolon: bool
+    point: str,
+    tokens: list[str],
+    has_semicolon: bool,
+    known_points: set[str] | None = None,
 ) -> str:
   if not tokens:
     return 'possible'
@@ -445,6 +451,8 @@ def _parse_constrained_prefix(
         break
       if not _POINT_RE.match(tok):
         return 'invalid'
+      if known_points is not None and tok != point and tok not in known_points:
+        return 'invalid'
       args.append(tok)
       if len(args) > max_arity:
         return 'invalid'
@@ -463,7 +471,12 @@ def _parse_constrained_prefix(
   return 'possible'
 
 
-def _parse_constructive_prefix(tokens: list[str], has_semicolon: bool) -> str:
+def _parse_constructive_prefix(
+    point: str,
+    tokens: list[str],
+    has_semicolon: bool,
+    known_points: set[str] | None = None,
+) -> str:
   if not tokens:
     return 'possible'
   construction_count = 1
@@ -489,6 +502,17 @@ def _parse_constructive_prefix(tokens: list[str], has_semicolon: bool) -> str:
         break
       if not _POINT_RE.match(tok):
         return 'invalid'
+      if known_points is not None:
+        if tok != point and tok not in known_points:
+          return 'invalid'
+        if name == 'eqangle3' and tok == point:
+          return 'invalid'
+        if (
+            name in _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG
+            and not args
+            and tok != point
+        ):
+          return 'invalid'
       args.append(tok)
       if len(args) > max_arity:
         return 'invalid'
@@ -512,7 +536,9 @@ def _parse_constructive_prefix(tokens: list[str], has_semicolon: bool) -> str:
   return 'possible'
 
 
-def candidate_dsl_prefix_status(text: str) -> str:
+def candidate_dsl_prefix_status(
+    text: str, known_points: set[str] | None = None
+) -> str:
   """Return possible/complete/invalid for a raw candidate generation prefix."""
   text = text.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ')
   if any(ch not in _DSL_TOKEN_CHARS and not ch.isspace() for ch in text):
@@ -533,6 +559,8 @@ def candidate_dsl_prefix_status(text: str) -> str:
   point = tokens[0]
   if not _POINT_RE.match(point):
     return 'invalid'
+  if known_points is not None and point in known_points:
+    return 'invalid'
   if len(tokens) == 1:
     return 'possible'
   sep = tokens[1]
@@ -544,8 +572,8 @@ def candidate_dsl_prefix_status(text: str) -> str:
   if has_semicolon:
     body = body[:-1] + [';']
   if sep == ':':
-    return _parse_constrained_prefix(point, body, has_semicolon)
-  return _parse_constructive_prefix(body, has_semicolon)
+    return _parse_constrained_prefix(point, body, has_semicolon, known_points)
+  return _parse_constructive_prefix(point, body, has_semicolon, known_points)
 
 
 def template_backfill_candidates(
@@ -1245,6 +1273,7 @@ class QwenGenerator:
       grammar_constrained: bool = False,
       prompt_len: int | None = None,
       prefix: str = '',
+      known_points: set[str] | None = None,
   ):
     import torch  # pylint: disable=import-outside-toplevel
     from transformers import LogitsProcessor, LogitsProcessorList  # pylint: disable=import-outside-toplevel
@@ -1269,7 +1298,7 @@ class QwenGenerator:
           gen_ids = input_ids[row_idx, prompt_len:].tolist()
           suffix = self.tokenizer.decode(gen_ids, skip_special_tokens=True)
           current = prefix + suffix
-          status = candidate_dsl_prefix_status(current)
+          status = candidate_dsl_prefix_status(current, known_points)
           if status == 'complete':
             masked[row_idx, eos_id] = scores[row_idx, eos_id]
             continue
@@ -1278,7 +1307,12 @@ class QwenGenerator:
             if token_id == eos_id:
               continue
             token_piece = allowed_token_text.get(token_id, '')
-            if candidate_dsl_prefix_status(current + token_piece) != 'invalid':
+            if (
+                candidate_dsl_prefix_status(
+                    current + token_piece, known_points
+                )
+                != 'invalid'
+            ):
               row_allowed.append(token_id)
           if row_allowed:
             ids = torch.tensor(row_allowed, device=scores.device)
@@ -1324,6 +1358,7 @@ class QwenGenerator:
               grammar_constrained=dsl_filter,
               prompt_len=prompt_len,
               prefix=prefix,
+              known_points=forbidden_point_names if forbidden_point_names else None,
           )
           if dsl_token_mask
           else None
@@ -1348,6 +1383,12 @@ class QwenGenerator:
         if point_repair:
           text = repair_candidate_point_name(text, forbidden_point_names)
         if dsl_filter and not candidate_passes_dsl_filter(text):
+          continue
+        if (
+            dsl_filter
+            and forbidden_point_names
+            and candidate_dsl_prefix_status(text, forbidden_point_names) == 'invalid'
+        ):
           continue
         if not candidate_passes_point_mask(text, forbidden_point_names):
           continue

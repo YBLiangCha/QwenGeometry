@@ -76,6 +76,7 @@ changes. Tags are the practical version identifiers for this workspace.
 - Affected paths: grammar shape filter, mixed constructive prompt prefix, and constrained-predicate-to-construction translation.
 - Motivation: the prompt-aug bench surfaced invalid candidates such as `q = eqangle3 q c b i a j`, which AG rejects or treats as referencing the not-yet-created point.
 - Hard-negative logging now also includes `unknown_point`, because the same partial run showed many invalid candidates referencing points outside the current graph.
+- Semantic point masking now threads current graph point names into DSL prefix validation: candidate arguments must be existing points or the current new point, existing points cannot be reused as the constructed point, and non-`eqangle3` constructions must put the new point in the first RHS argument.
 - Status: implemented after `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_v1` had already started, so it applies to the next rerun/version rather than the currently running process.
 
 ### `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_v1`

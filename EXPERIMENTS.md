@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `pairwise_value_ranker_v7_v1`
+- Current GitHub source head: `semantic_v3_partial_5done_v8_eval_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -15,7 +15,7 @@ changes. Tags are the practical version identifiers for this workspace.
   or `template_backfill_seen_canonical_v1`, because the process was already
   running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `pairwise_value_ranker_v7_v1`, optionally with a new bench tag such as
+  `semantic_v3_partial_5done_v8_eval_v1`, optionally with a new bench tag such as
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_dedup_v1`.
 - Remote running-workspace scripts are intentionally not overwritten while
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
@@ -37,6 +37,28 @@ changes. Tags are the practical version identifiers for this workspace.
 - Main observed bottleneck: canonical duplicate collapse remained very high; several problems were DDAR-timeout blocked or made symbolic progress in the wrong direction.
 
 ## Value Models
+
+### `v8_pairwise_preddar_v5_plus_semantic_v3_partial5_typed_v1`
+
+- Output: `outputs/candidate_value_model_v8_pairwise_preddar_v5_plus_semantic_v3_partial5_typed_v1`
+- Model file: `outputs/candidate_value_model_v8_pairwise_preddar_v5_plus_semantic_v3_partial5_typed_v1/candidate_value_model.json`
+- Objective: `pairwise`; feature policy: `pre_ddar_features`; `train_valid_only=true`.
+- Data: v5 base value data plus the current semantic-v3 partial value rows,
+  rebuilt at 2026-06-07 23:31 +0800 after 5 completed problems.
+- Rows after merge/dedup: 8176 total, 753 positive, 7423 negative.
+- Valid-only training rows: 5738 train rows, 71 eval rows.
+- Pairwise training details: 37 positive/negative groups by `problem,depth`,
+  121420 full pairs per epoch, 136740 sampled pairs total.
+- Offline top-k diagnostics on all valid rows from the v8 merged data:
+  - v7: AUC 0.6069; first-positive mean rank 1.08; top-4 recall 0.2138; top-8 recall 0.3785; top-16 recall 0.6587.
+  - v8: AUC 0.6333; first-positive mean rank 1.12; top-4 recall 0.2231; top-8 recall 0.3891; top-16 recall 0.6507.
+- Held-out `split=eval` valid rows remain small (71 rows, 20 positives,
+  4 positive groups):
+  - v7: AUC 0.7000; first-positive mean rank 1.50; top-4 recall 0.4500; top-8 recall 0.7500; top-16 recall 1.0000.
+  - v8: AUC 0.7000; first-positive mean rank 1.00; top-4 recall 0.4000; top-8 recall 0.7500; top-16 recall 1.0000.
+- Readout: v8 is a useful evaluated snapshot and slightly improves all-row
+  top-8 recall, but it does not beat v7 on the current top-16 budget. Keep v7
+  as the next-rerun default; revisit after the full 16-problem benchmark.
 
 ### `v7_pairwise_preddar_v5_plus_semantic_v3_partial4_typed_v1`
 
@@ -238,6 +260,17 @@ changes. Tags are the practical version identifiers for this workspace.
   - Top hard-negative construction types: `on_line+on_line`: 240, `on_bline+on_line`: 54, `eqangle3`: 40, `on_circum+on_line`: 36, `on_circum`: 23.
   - `translated_imo_2008_p1a` completed unsolved with diagnosis `duplicate_collapse`, `candidate_ddar_timeouts`, and `symbolic_progress_but_wrong_direction`.
   - `translated_imo_2008_p1b` was in progress with 406 candidates, 314 valid, 92 invalid, 79 canonical duplicates, 16 DDAR runs, and diagnosis `symbolic_progress_but_wrong_direction`.
+- Partial analysis snapshot at 2026-06-07 23:31 +0800:
+  - Analysis: `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_5events_4done_typed_v1_analysis.json`
+  - Report: `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_5events_4done_typed_v1_report.md`
+  - Event files: 6; completed 5/16; solved 1/5 completed (`translated_imo_2004_p1`); `translated_imo_2009_p2` had just started with no candidates.
+  - Aggregate candidates: 8490; valid/invalid 7057/1433, invalid rate 16.9%.
+  - Filtered total: 6833; canonical duplicates 4040, 47.6% vs candidates.
+  - Candidate DDAR done/errors: 172/38.
+  - Candidate SFT signals: 142.
+  - Candidate hard negatives: 664 (`point_too_close`: 541, `point_too_far`: 123).
+  - `translated_imo_2008_p1b` completed unsolved with 2641 candidates, 504 invalid, 1108 canonical duplicates, 62 DDAR runs, and diagnosis `duplicate_collapse`, `candidate_ddar_timeouts`, `symbolic_progress_but_wrong_direction`.
+  - `translated_imo_2008_p6` completed unsolved with 47 candidates, 7 invalid, 2 canonical duplicates, 0 DDAR runs, and diagnosis `candidate_ddar_timeout_blocked`, `valid_candidates_not_evaluated`.
 
 ### `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_1row_v1`
 
@@ -269,6 +302,19 @@ changes. Tags are the practical version identifiers for this workspace.
 - Hard-negative rows: 456 total, 411 train, 45 eval; reasons are 371 `point_too_close` and 85 `point_too_far`.
 - Hard-negative construction types top: `on_line+on_line`: 240, `on_bline+on_line`: 54, `eqangle3`: 40, `on_circum+on_line`: 36, `on_circum`: 23.
 - Purpose: current best partial SFT/hard-negative snapshot while waiting for the full 16-problem run.
+
+### `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_5events_4done_typed_v1`
+
+- Output: `data/staged_1m_pruned_v2/candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_5events_4done_typed_v1`
+- Snapshot time: 2026-06-07 23:31 +0800, after 5 completed problems and while `translated_imo_2009_p2` had just started.
+- Positive candidate SFT rows: 142 total, 128 train, 14 eval; counts include 141 `ddar_progress_positive` rows and 1 `candidate_solved` row.
+- Companion hard-negative output: `data/staged_1m_pruned_v2/candidate_hardneg_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_5events_4done_typed_v1`
+- Hard-negative rows: 664 total, 598 train, 66 eval; reasons are 541 `point_too_close` and 123 `point_too_far`.
+- Companion value-data output: `data/staged_1m_pruned_v2/value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_5events_4done_typed_v1/candidate_value_rows.jsonl`
+- Value rows: 8490 total, 179 positive, 8311 negative.
+- Top value-row reasons: `valid_but_unsolved`: 4169, `valid_nonwinning`: 2670, `point_too_close`: 650, `other_error`: 593, `ddar_progress_positive`: 178, `point_too_far`: 137.
+- Top value-row construction types: `on_circum`: 1213, `on_pline`: 1126, `on_line+on_line`: 1070, `on_tline`: 1063, `on_line`: 960, `on_circle`: 894, `eqangle3`: 714.
+- Purpose: latest partial data snapshot before the full 16-problem run finishes.
 
 ## Next Candidate-Quality Fixes
 

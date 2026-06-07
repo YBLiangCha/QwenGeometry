@@ -116,6 +116,17 @@ changes. Tags are the practical version identifiers for this workspace.
 - Early readout: v3 removed most invalid-predicate/unknown-point noise from the first problem, but `translated_imo_2000_p6` is still candidate-DDAR-timeout blocked.
 - Live check at 2026-06-07 22:08 +0800: still running on `translated_imo_2004_p1`, summary rows 1/16. The second problem had reached depth 3 with 1789 candidates, 1489 filtered candidates, 862 canonical duplicates, 627 depth-rank prunes, 49 DDAR runs, 42 verifier-backed candidate SFT signals, and 100 hard-negative signals.
 - Live check at 2026-06-07 22:20 +0800: `translated_imo_2004_p1` solved at depth 3 with aux `n = on_line n e f, on_bline n f e`. The solving candidate target was `n : C e f n 00 D n e n f 01 ;`; candidate DDAR took 79.616 sec and added 415 dependencies. At solve time the problem had 3138 candidates, 2668 filtered candidates, 1790 canonical duplicates, 878 depth-rank prunes, 44 candidate SFT signals, and 152 hard-negative signals. The run then advanced to `translated_imo_2008_p1a`.
+- Partial analysis snapshot at 2026-06-07 22:24 +0800:
+  - Analysis: `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_2rows_analysis.json`
+  - Report: `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_2rows_report.md`
+  - Completed 2/16, solved 1/2 completed (`translated_imo_2004_p1`).
+  - Event files: 3, because `translated_imo_2008_p1a` was already in progress.
+  - Aggregate candidates: 3654; valid/invalid 3146/508, invalid rate 13.9%.
+  - Filtered total: 2815; canonical duplicates 1899, 52.0% vs candidates.
+  - Candidate DDAR done/errors: 66/16.
+  - Candidate SFT signals: 54.
+  - Candidate hard negatives: 207 (`point_too_close`: 154, `point_too_far`: 53).
+  - Decision: keep the v3 run alive because it solved a genuinely new problem and is producing SFT/hard-negative signal. Do not restart solely for the later template-backfill duplicate fix; apply `template_backfill_seen_canonical_v1` on the next clean rerun.
 
 ### `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_1row_v1`
 

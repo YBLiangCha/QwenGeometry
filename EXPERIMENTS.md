@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `value_model_topk_eval_v1`
+- Current GitHub source head: `pairwise_value_ranker_v7_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -15,7 +15,7 @@ changes. Tags are the practical version identifiers for this workspace.
   or `template_backfill_seen_canonical_v1`, because the process was already
   running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `value_model_topk_eval_v1`, optionally with a new bench tag such as
+  `pairwise_value_ranker_v7_v1`, optionally with a new bench tag such as
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_dedup_v1`.
 - Remote running-workspace scripts are intentionally not overwritten while
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
@@ -37,6 +37,30 @@ changes. Tags are the practical version identifiers for this workspace.
 - Main observed bottleneck: canonical duplicate collapse remained very high; several problems were DDAR-timeout blocked or made symbolic progress in the wrong direction.
 
 ## Value Models
+
+### `v7_pairwise_preddar_v5_plus_semantic_v3_partial4_typed_v1`
+
+- Output: `outputs/candidate_value_model_v7_pairwise_preddar_v5_plus_semantic_v3_partial4_typed_v1`
+- Model file: `outputs/candidate_value_model_v7_pairwise_preddar_v5_plus_semantic_v3_partial4_typed_v1/candidate_value_model.json`
+- Objective: `pairwise`; feature policy: `pre_ddar_features`; `train_valid_only=true`.
+- Training command uses `run_value_model_append_partial.sh` with
+  `VALUE_TRAIN_EXTRA_ARGS='--objective pairwise --train_valid_only --epochs 20 --lr 0.01 --pairwise_negatives_per_positive 16'`.
+- Data: v5 base value data plus the current semantic-v3 partial value rows,
+  rebuilt at 2026-06-07 23:24 +0800 while `translated_imo_2008_p1b` was still running.
+- Rows after merge/dedup: 8085 total, 742 positive, 7343 negative.
+- Valid-only training rows: 5661 train rows, 71 eval rows.
+- Pairwise training details: 37 positive/negative groups by `problem,depth`,
+  120652 full pairs per epoch, 130020 sampled pairs total.
+- Offline top-k diagnostics on all valid rows from the v7 merged data:
+  - v6: AUC 0.8596; first-positive mean rank 1.49; top-4 recall 0.1927; top-8 recall 0.3491; top-16 recall 0.6658.
+  - v7: AUC 0.6086; first-positive mean rank 1.08; top-4 recall 0.2170; top-8 recall 0.3868; top-16 recall 0.6685.
+- Held-out `split=eval` valid rows are still small (71 rows, 20 positives,
+  4 positive groups):
+  - v6: AUC 0.5196; first-positive mean rank 4.00; top-4 recall 0.2000; top-8 recall 0.5500; top-16 recall 1.0000.
+  - v7: AUC 0.7000; first-positive mean rank 1.50; top-4 recall 0.4500; top-8 recall 0.7500; top-16 recall 1.0000.
+- Readout: v7 is a better fit for the actual DDAR top-k budget even though its
+  row-level AUC is lower on the all-row pool. It becomes the recommended
+  default for the next clean rerun, with v6/v5/v4 retained as fallbacks.
 
 ### `v6_preddar_v5_plus_semantic_v3_partial4_typed_v1`
 
@@ -248,6 +272,21 @@ changes. Tags are the practical version identifiers for this workspace.
 
 ## Next Candidate-Quality Fixes
 
+### `pairwise_value_ranker_v7_v1`
+
+- `scripts/train_candidate_value_model.py` now supports
+  `--objective pairwise` in addition to the existing logistic objective.
+- Pairwise training groups candidates by `--pairwise_group_by`
+  (default `problem,depth`) and optimizes positive candidates to rank above
+  sampled negatives from the same group.
+- Added `--train_valid_only` to train value/reranker models only on candidates
+  that are actually available to online reranking after translation/validation.
+- `data/synth_cpt_1m_pruned_v2/run_value_model_append_partial.sh` now accepts
+  `VALUE_TRAIN_EXTRA_ARGS`, allowing queue scripts to select pairwise training
+  without editing the script.
+- `data/synth_cpt_1m_pruned_v2/run_fact_context_unsolved_ablation.sh` now
+  defaults to the v7 pairwise value model, with v6, v5, and v4 fallbacks.
+
 ### `value_model_topk_eval_v1`
 
 - Added `scripts/evaluate_candidate_value_model.py`.
@@ -272,6 +311,8 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: ensure the next clean fact-context unsolved rerun uses the corrected
   pre-DDAR reranker by default, while preserving an explicit override through
   `QWEN_CANDIDATE_VALUE_MODEL`.
+- Superseded by `pairwise_value_ranker_v7_v1`, which defaults the next rerun
+  to the pairwise v7 model and keeps v6 as the first fallback.
 
 ### `preddar_value_model_v6_partial_v1`
 

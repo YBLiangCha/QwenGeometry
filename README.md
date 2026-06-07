@@ -51,7 +51,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `next_ablation_uses_preddar_v6_v1`
+  `pairwise_value_ranker_v7_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -61,9 +61,9 @@ load TkAgg.
 - Current timeout/hard-negative value model:
   `v5_timeout_hardneg_features_v1_plus_v3`
 - Current recommended pre-DDAR partial value model for the next clean rerun:
-  `v6_preddar_v5_plus_semantic_v3_partial4_typed_v1`
-- `run_fact_context_unsolved_ablation.sh` now selects that v6 pre-DDAR model by
-  default, with v5 and v4 fallback paths.
+  `v7_pairwise_preddar_v5_plus_semantic_v3_partial4_typed_v1`
+- `run_fact_context_unsolved_ablation.sh` now selects that v7 pairwise model by
+  default, with v6, v5, and v4 fallback paths.
 - Next clean candidate-quality code baseline after the running process:
   `semantic_point_mask_v4`, `value_rerank_event_scores_v1`, and
   `template_backfill_seen_canonical_v1`, `generation_canonical_dedup_v1`, and

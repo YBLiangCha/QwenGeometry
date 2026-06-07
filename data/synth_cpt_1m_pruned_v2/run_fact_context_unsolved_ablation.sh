@@ -15,9 +15,10 @@ WAIT_INTERVAL=${WAIT_INTERVAL:-300}
 WAIT_TIMEOUT_SEC=${WAIT_TIMEOUT_SEC:-0}
 DRY_RUN=${DRY_RUN:-0}
 
-VALUE_MODEL_PREFERRED=${VALUE_MODEL_PREFERRED:-outputs/candidate_value_model_v6_preddar_v5_plus_semantic_v3_partial4_typed_v1/candidate_value_model.json}
-VALUE_MODEL_FALLBACK=${VALUE_MODEL_FALLBACK:-outputs/candidate_value_model_v5_timeout_hardneg_features_v1_plus_v3/candidate_value_model.json}
-VALUE_MODEL_LEGACY_FALLBACK=${VALUE_MODEL_LEGACY_FALLBACK:-outputs/candidate_value_model_v4_hardneg_features_from_qwen_v1_logs/candidate_value_model.json}
+VALUE_MODEL_PREFERRED=${VALUE_MODEL_PREFERRED:-outputs/candidate_value_model_v7_pairwise_preddar_v5_plus_semantic_v3_partial4_typed_v1/candidate_value_model.json}
+VALUE_MODEL_FALLBACK=${VALUE_MODEL_FALLBACK:-outputs/candidate_value_model_v6_preddar_v5_plus_semantic_v3_partial4_typed_v1/candidate_value_model.json}
+VALUE_MODEL_LEGACY_FALLBACK=${VALUE_MODEL_LEGACY_FALLBACK:-outputs/candidate_value_model_v5_timeout_hardneg_features_v1_plus_v3/candidate_value_model.json}
+VALUE_MODEL_OLDEST_FALLBACK=${VALUE_MODEL_OLDEST_FALLBACK:-outputs/candidate_value_model_v4_hardneg_features_from_qwen_v1_logs/candidate_value_model.json}
 
 select_value_model() {
   if [ -n "${QWEN_CANDIDATE_VALUE_MODEL:-}" ]; then
@@ -26,8 +27,10 @@ select_value_model() {
     printf '%s\n' "$VALUE_MODEL_PREFERRED"
   elif [ -s "$VALUE_MODEL_FALLBACK" ]; then
     printf '%s\n' "$VALUE_MODEL_FALLBACK"
-  else
+  elif [ -s "$VALUE_MODEL_LEGACY_FALLBACK" ]; then
     printf '%s\n' "$VALUE_MODEL_LEGACY_FALLBACK"
+  else
+    printf '%s\n' "$VALUE_MODEL_OLDEST_FALLBACK"
   fi
 }
 
@@ -38,6 +41,7 @@ if [ "$DRY_RUN" = "1" ]; then
   echo "preferred value model: $VALUE_MODEL_PREFERRED"
   echo "fallback value model: $VALUE_MODEL_FALLBACK"
   echo "legacy fallback value model: $VALUE_MODEL_LEGACY_FALLBACK"
+  echo "oldest fallback value model: $VALUE_MODEL_OLDEST_FALLBACK"
   SELECTED_VALUE_MODEL=$(select_value_model)
   echo "selected value model: $SELECTED_VALUE_MODEL"
   FINAL_ADAPTER_OVERRIDE="$FACT_ADAPTER" \

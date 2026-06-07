@@ -19,6 +19,7 @@ MERGED_DATA=${MERGED_DATA:-${OUT_DIR}/candidate_value_data.jsonl}
 MODEL_FILE=${MODEL_FILE:-${OUT_DIR}/candidate_value_model.json}
 SUMMARY_FILE=${SUMMARY_FILE:-${OUT_DIR}/summary.json}
 INCLUDE_UNEVALUATED_VALID=${INCLUDE_UNEVALUATED_VALID:-1}
+VALUE_TRAIN_EXTRA_ARGS=${VALUE_TRAIN_EXTRA_ARGS:-}
 
 mkdir -p "$OUT_DIR"
 
@@ -108,9 +109,11 @@ if not rows:
 PY
 
 echo "training value model: $VALUE_TAG"
+# shellcheck disable=SC2086
 python -u "$SCRIPT_DIR/train_candidate_value_model.py" \
   --train_file "$MERGED_DATA" \
   --out_file "$MODEL_FILE" \
+  $VALUE_TRAIN_EXTRA_ARGS \
   > "$OUT_DIR/train.log" 2>&1
 
 cat "$SUMMARY_FILE"

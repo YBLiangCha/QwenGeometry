@@ -94,6 +94,15 @@ def load_rows(path: Path) -> list[dict[str, Any]]:
   return rows
 
 
+def is_valid_online_candidate(row: dict[str, Any]) -> bool:
+  translation = str(row.get('translation') or '')
+  return bool(translation.strip()) and not translation.startswith('ERROR:')
+
+
+def group_key(row: dict[str, Any], fields: list[str]) -> tuple[Any, ...]:
+  return tuple(row.get(field) for field in fields)
+
+
 def metrics(
     rows: list[dict[str, Any]],
     weights: dict[str, float],
@@ -142,11 +151,33 @@ def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser()
   parser.add_argument('--train_file', required=True)
   parser.add_argument('--out_file', required=True)
+  parser.add_argument(
+      '--objective',
+      choices=('logistic', 'pairwise'),
+      default='logistic',
+      help='logistic row classification or pairwise positive-vs-negative ranking',
+  )
+  parser.add_argument(
+      '--pairwise_group_by',
+      default='problem,depth',
+      help='comma-separated row fields used to form pairwise ranking groups',
+  )
+  parser.add_argument(
+      '--pairwise_negatives_per_positive',
+      type=int,
+      default=16,
+      help='maximum sampled negatives per positive per epoch; <=0 uses all negatives',
+  )
   parser.add_argument('--epochs', type=int, default=40)
   parser.add_argument('--lr', type=float, default=0.05)
   parser.add_argument('--l2', type=float, default=1e-5)
   parser.add_argument('--seed', type=int, default=7)
   parser.add_argument('--min_abs_weight', type=float, default=1e-6)
+  parser.add_argument(
+      '--train_valid_only',
+      action='store_true',
+      help='train only candidates whose translation is valid, matching online rerank inputs',
+  )
   parser.add_argument(
       '--include_posthoc_features',
       action='store_true',
@@ -158,24 +189,16 @@ def parse_args() -> argparse.Namespace:
   return parser.parse_args()
 
 
-def main() -> None:
-  args = parse_args()
-  rows = load_rows(Path(args.train_file))
-  train_rows = [row for row in rows if row.get('split', 'train') == 'train']
-  eval_rows = [row for row in rows if row.get('split') == 'eval']
-  if not any(int(row.get('label', 0)) for row in train_rows):
-    moved = [row for row in eval_rows if int(row.get('label', 0))]
-    if moved:
-      train_rows.extend(moved)
-      eval_rows = [row for row in eval_rows if not int(row.get('label', 0))]
-  positives = sum(int(row.get('label', 0)) for row in train_rows)
-  negatives = len(train_rows) - positives
-  if not train_rows:
-    raise ValueError('no training rows')
+def train_logistic(
+    train_rows: list[dict[str, Any]],
+    weights: dict[str, float],
+    bias: float,
+    args: argparse.Namespace,
+    rng: random.Random,
+    positives: int,
+    negatives: int,
+) -> float:
   pos_weight = negatives / max(positives, 1)
-  weights: dict[str, float] = {}
-  bias = math.log((positives + 1.0) / (negatives + 1.0))
-  rng = random.Random(args.seed)
   for _ in range(args.epochs):
     rng.shuffle(train_rows)
     for row in train_rows:
@@ -191,6 +214,94 @@ def main() -> None:
       for tok in unique_toks:
         old = weights.get(tok, 0.0)
         weights[tok] = old - args.lr * (grad + args.l2 * old)
+  return bias
+
+
+def train_pairwise(
+    train_rows: list[dict[str, Any]],
+    weights: dict[str, float],
+    bias: float,
+    args: argparse.Namespace,
+    rng: random.Random,
+) -> dict[str, Any]:
+  fields = [field.strip() for field in args.pairwise_group_by.split(',') if field.strip()]
+  grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+  for row in train_rows:
+    grouped.setdefault(group_key(row, fields), []).append(row)
+  pair_groups = []
+  total_pairs_per_full_pass = 0
+  for rows in grouped.values():
+    positives = [row for row in rows if int(row.get('label', 0))]
+    negatives = [row for row in rows if not int(row.get('label', 0))]
+    if positives and negatives:
+      pair_groups.append((positives, negatives))
+      total_pairs_per_full_pass += len(positives) * len(negatives)
+  sampled_pairs = 0
+  for _ in range(args.epochs):
+    rng.shuffle(pair_groups)
+    for positives, negatives in pair_groups:
+      for pos in positives:
+        if args.pairwise_negatives_per_positive <= 0:
+          sampled_negatives = list(negatives)
+        else:
+          count = min(args.pairwise_negatives_per_positive, len(negatives))
+          sampled_negatives = rng.sample(negatives, count)
+        pos_toks = set(tokens_for_row(
+            pos, include_posthoc_features=args.include_posthoc_features
+        ))
+        for neg in sampled_negatives:
+          neg_toks = set(tokens_for_row(
+              neg, include_posthoc_features=args.include_posthoc_features
+          ))
+          pos_score = score(weights, bias, list(pos_toks))
+          diff = pos_score - score(weights, bias, list(neg_toks))
+          grad = sigmoid(diff) - 1.0
+          for tok in pos_toks:
+            old = weights.get(tok, 0.0)
+            weights[tok] = old - args.lr * (grad + args.l2 * old)
+          for tok in neg_toks:
+            old = weights.get(tok, 0.0)
+            weights[tok] = old - args.lr * (-grad + args.l2 * old)
+          sampled_pairs += 1
+  return {
+      'pairwise_group_by': fields,
+      'pairwise_groups': len(pair_groups),
+      'pairwise_full_pairs_per_epoch': total_pairs_per_full_pass,
+      'pairwise_sampled_pairs': sampled_pairs,
+      'pairwise_negatives_per_positive': args.pairwise_negatives_per_positive,
+  }
+
+
+def main() -> None:
+  args = parse_args()
+  rows = load_rows(Path(args.train_file))
+  if args.train_valid_only:
+    rows = [row for row in rows if is_valid_online_candidate(row)]
+  train_rows = [row for row in rows if row.get('split', 'train') == 'train']
+  eval_rows = [row for row in rows if row.get('split') == 'eval']
+  if not any(int(row.get('label', 0)) for row in train_rows):
+    moved = [row for row in eval_rows if int(row.get('label', 0))]
+    if moved:
+      train_rows.extend(moved)
+      eval_rows = [row for row in eval_rows if not int(row.get('label', 0))]
+  positives = sum(int(row.get('label', 0)) for row in train_rows)
+  negatives = len(train_rows) - positives
+  if not train_rows:
+    raise ValueError('no training rows')
+  weights: dict[str, float] = {}
+  bias = (
+      math.log((positives + 1.0) / (negatives + 1.0))
+      if args.objective == 'logistic'
+      else 0.0
+  )
+  rng = random.Random(args.seed)
+  training_details: dict[str, Any] = {}
+  if args.objective == 'logistic':
+    bias = train_logistic(
+        train_rows, weights, bias, args, rng, positives, negatives
+    )
+  else:
+    training_details = train_pairwise(train_rows, weights, bias, args, rng)
   weights = {
       token: value
       for token, value in weights.items()
@@ -198,11 +309,14 @@ def main() -> None:
   }
   model = {
       'format': 'qwen_ag_candidate_value_v1',
+      'objective': args.objective,
       'feature_policy': (
           'posthoc_features'
           if args.include_posthoc_features
           else 'pre_ddar_features'
       ),
+      'train_valid_only': args.train_valid_only,
+      'training_details': training_details,
       'weights': weights,
       'bias': bias,
       'train_file': args.train_file,
@@ -238,7 +352,24 @@ def main() -> None:
   out_path = Path(args.out_file)
   out_path.parent.mkdir(parents=True, exist_ok=True)
   out_path.write_text(json.dumps(model, ensure_ascii=False, indent=2), encoding='utf-8')
-  print(json.dumps({k: model[k] for k in ['format', 'train_file', 'label_counts', 'metrics', 'warnings']}, ensure_ascii=False, indent=2))
+  print(json.dumps(
+      {
+          k: model[k]
+          for k in [
+              'format',
+              'objective',
+              'feature_policy',
+              'train_valid_only',
+              'training_details',
+              'train_file',
+              'label_counts',
+              'metrics',
+              'warnings',
+          ]
+      },
+      ensure_ascii=False,
+      indent=2,
+  ))
 
 
 if __name__ == '__main__':

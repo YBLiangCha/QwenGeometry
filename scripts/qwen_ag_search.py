@@ -157,6 +157,10 @@ def _goal_point_names(p: Any) -> set[str]:
   return {str(arg) for arg in getattr(goal, 'args', []) if _POINT_RE.match(str(arg))}
 
 
+def goal_point_names(p: Any) -> set[str]:
+  return _goal_point_names(p)
+
+
 def dependency_fact_text(dep: Any) -> str | None:
   name = getattr(dep, 'name', None)
   if name not in _FACT_PREDICATE_WEIGHTS:
@@ -690,16 +694,23 @@ def template_backfill_candidates(
     point_names: set[str] | None,
     max_candidates: int,
     excluded_canonical_keys: set[str] | None = None,
+    preferred_points: set[str] | None = None,
 ) -> list[str]:
   """Generate type-diverse DSL candidates from simple construction templates."""
   if not point_names or max_candidates <= 0:
     return []
   new_point = next_free_point_name(point_names)
-  pts = sorted(point_names)
+  preferred_points = {
+      point for point in (preferred_points or set()) if point in point_names
+  }
+  pts = sorted(point_names, key=lambda point: (point not in preferred_points, point))
   if not new_point or len(pts) < 3:
     return []
   buckets: list[list[str]] = [[] for _ in range(12)]
   seen_canonical: set[str] = set()
+
+  def prefer_key(item: tuple[str, ...]) -> tuple[int, tuple[str, ...]]:
+    return (-sum(point in preferred_points for point in item), item)
 
   def add(bucket: int, text: str) -> None:
     key = text
@@ -735,6 +746,7 @@ def template_backfill_candidates(
       for i in range(len(pts))
       for j in range(i + 1, len(pts))
   ]
+  pairs.sort(key=prefer_key)
   selected_pairs = spread(pairs, 24)
   for a, b in selected_pairs[:12]:
     add(0, f'{new_point} = on_line {new_point} {a} {b};')
@@ -751,6 +763,7 @@ def template_backfill_candidates(
       for j in range(i + 1, len(pts))
       for k in range(j + 1, len(pts))
   ]
+  triples.sort(key=prefer_key)
   selected_triples = spread(triples, 24)
   for a, b, c in selected_triples[:12]:
     add(2, f'{new_point} : O {new_point} {a} {b} {c} 00 ;')
@@ -1578,6 +1591,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
       for node_index, (prev_score, (g_cur, prompt, pstring)) in enumerate(
           beam.ordered()
       ):
+        p_cur = pr.Problem.from_txt(pstring, translate=False)
         event(
             args.events_file,
             kind='decode_start',
@@ -1618,6 +1632,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
               forbidden_points,
               needed * 4,
               seen_candidate_keys if args.candidate_canonical_dedup else None,
+              goal_point_names(p_cur),
           ):
             generation_key = candidate_generation_dedup_key(raw)
             if raw not in seen_raw and generation_key not in seen_generation_keys:
@@ -1752,6 +1767,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
         break
       continue
     for prev_score, (g_cur, prompt, pstring) in beam.ordered():
+      p_cur = pr.Problem.from_txt(pstring, translate=False)
       event(
           args.events_file,
           kind='decode_start',
@@ -1792,6 +1808,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
             forbidden_points,
             needed * 4,
             seen_candidate_keys if args.candidate_canonical_dedup else None,
+            goal_point_names(p_cur),
         ):
           generation_key = candidate_generation_dedup_key(raw)
           if raw not in seen_raw and generation_key not in seen_generation_keys:

@@ -51,7 +51,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `high_value_template_backfill_queue_v1`
+  `goal_aware_template_backfill_queue_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -97,6 +97,9 @@ load TkAgg.
   `angle_bisector`, `angle_mirror`, `on_aline`, `on_aline2`, and
   `eqangle3`, giving the clean rerun more diverse fallback candidates after
   LM/canonical duplicate collapse.
+- Template point combinations are goal-aware: fallback pairs/triples are
+  ordered to prefer points that appear in the current target predicate before
+  the spread sampler selects diverse templates.
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

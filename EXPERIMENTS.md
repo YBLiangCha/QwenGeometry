@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `high_value_template_backfill_queue_v1`
+- Current GitHub source head: `goal_aware_template_backfill_queue_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -79,6 +79,18 @@ changes. Tags are the practical version identifiers for this workspace.
   diverse candidates when LM generations collapse to duplicates.
 - The postrun queue still uses `SIGNAL_REPEAT=4` and depth-24 clean rerun
   settings from the previous version.
+
+### `goal_aware_template_backfill_queue_v1`
+
+- Adds an optional `preferred_points` argument to
+  `template_backfill_candidates`; benchmark and standalone search now pass the
+  current goal predicate's point names.
+- Pair/triple template pools are ordered by how many preferred points they
+  contain before the existing spread sampler selects diverse candidates.
+- Motivation: high-value fallback templates are only useful if their point
+  choices are relevant. Goal-aware ordering should make template backfill spend
+  more of its budget around the target relation instead of mostly early
+  alphabetical point combinations.
 
 ### `semantic_v3_partial_7events_6summary_v1`
 

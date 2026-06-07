@@ -310,6 +310,7 @@ def post_canonical_template_backfill(
     g_cur: Any,
     pr: Any,
     pt: Any,
+    preferred_points: set[str] | None = None,
 ) -> None:
   if len(translated_candidates) >= target_count:
     return
@@ -318,7 +319,7 @@ def post_canonical_template_backfill(
   needed = target_count - len(translated_candidates)
   template_budget = max(target_count * 32, needed * 16, 128)
   for raw in qs.template_backfill_candidates(
-      forbidden_points, template_budget, seen_candidate_keys
+      forbidden_points, template_budget, seen_candidate_keys, preferred_points
   ):
     attempted += 1
     if raw in seen_raw:
@@ -558,8 +559,8 @@ def solve_one(
       for node_index, (prev_score, (g_cur, prompt, pstring)) in enumerate(
           beam.ordered()
       ):
+        p_cur = pr.Problem.from_txt(pstring, translate=False)
         if g_cur is None:
-          p_cur = pr.Problem.from_txt(pstring, translate=False)
           g_cur, _ = build_graph_for_symbolic_search(gh, p_cur, qs.DEFINITIONS)
         qs.event(
             events_file,
@@ -601,6 +602,7 @@ def solve_one(
               forbidden_points,
               needed * 4,
               seen_candidate_keys if args.candidate_canonical_dedup else None,
+              qs.goal_point_names(p_cur),
           ):
             generation_key = qs.candidate_generation_dedup_key(raw)
             if raw not in seen_raw and generation_key not in seen_generation_keys:
@@ -672,6 +674,7 @@ def solve_one(
               g_cur,
               pr,
               pt,
+              qs.goal_point_names(p_cur),
           )
         ranked_node_candidates = qs.rerank_candidate_records(
             translated_candidates, args.candidate_rerank, value_model
@@ -872,8 +875,8 @@ def solve_one(
         break
       continue
     for prev_score, (g_cur, prompt, pstring) in beam.ordered():
+      p_cur = pr.Problem.from_txt(pstring, translate=False)
       if g_cur is None:
-        p_cur = pr.Problem.from_txt(pstring, translate=False)
         g_cur, _ = build_graph_for_symbolic_search(gh, p_cur, qs.DEFINITIONS)
       qs.event(
           events_file,
@@ -915,6 +918,7 @@ def solve_one(
             forbidden_points,
             needed * 4,
             seen_candidate_keys if args.candidate_canonical_dedup else None,
+            qs.goal_point_names(p_cur),
         ):
           generation_key = qs.candidate_generation_dedup_key(raw)
           if raw not in seen_raw and generation_key not in seen_generation_keys:
@@ -987,6 +991,7 @@ def solve_one(
             g_cur,
             pr,
             pt,
+            qs.goal_point_names(p_cur),
         )
       ranked_candidates = qs.rerank_candidate_records(
           translated_candidates, args.candidate_rerank, value_model

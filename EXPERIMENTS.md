@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `postrun_signal_repeat_depth24_queue_v1`
+- Current GitHub source head: `high_value_template_backfill_queue_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -66,6 +66,19 @@ changes. Tags are the practical version identifiers for this workspace.
   fact-context replay.
 - This keeps the clean rerun at the depth-24 budget introduced by
   `postrun_clean_depth24_queue_v1`.
+
+### `high_value_template_backfill_queue_v1`
+
+- Expands `template_backfill_candidates` from 7 to 12 construction buckets.
+  New fallback families include `angle_bisector`, `angle_mirror`,
+  `on_aline`, `on_aline2`, and `eqangle3`.
+- Motivation from the active semantic-v3 run: after 7 event files there are
+  13 `candidate_backfill_exhausted` events, mostly on `translated_imo_2010_p2`,
+  and the finite template set tops out around 96 candidates before AG
+  validation. The expanded high-value templates give the clean rerun more
+  diverse candidates when LM generations collapse to duplicates.
+- The postrun queue still uses `SIGNAL_REPEAT=4` and depth-24 clean rerun
+  settings from the previous version.
 
 ### `semantic_v3_partial_7events_6summary_v1`
 

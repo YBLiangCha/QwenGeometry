@@ -698,7 +698,7 @@ def template_backfill_candidates(
   pts = sorted(point_names)
   if not new_point or len(pts) < 3:
     return []
-  buckets: list[list[str]] = [[] for _ in range(7)]
+  buckets: list[list[str]] = [[] for _ in range(12)]
   seen_canonical: set[str] = set()
 
   def add(bucket: int, text: str) -> None:
@@ -760,6 +760,28 @@ def template_backfill_candidates(
     add(5, f'{new_point} : D {new_point} {a} {b} {c} 00 ;')
   for a, b in selected_pairs[:12]:
     add(6, f'{new_point} = on_circle {new_point} {a} {b};')
+  for a, b, c in selected_triples[:12]:
+    add(7, f'{new_point} = angle_bisector {new_point} {a} {b} {c};')
+    add(8, f'{new_point} = angle_mirror {new_point} {a} {b} {c};')
+  selected_quintuples = []
+  seen_quintuples = set()
+  for a, b in selected_pairs:
+    for c, d, e in selected_triples:
+      if len({a, b, c, d, e}) != 5:
+        continue
+      item = (a, b, c, d, e)
+      if item in seen_quintuples:
+        continue
+      selected_quintuples.append(item)
+      seen_quintuples.add(item)
+      if len(selected_quintuples) >= 24:
+        break
+    if len(selected_quintuples) >= 24:
+      break
+  for a, b, c, d, e in selected_quintuples[:12]:
+    add(9, f'{new_point} = on_aline {new_point} {a} {b} {c} {d} {e};')
+    add(10, f'{new_point} = on_aline2 {new_point} {a} {b} {c} {d} {e};')
+    add(11, f'{new_point} = eqangle3 {a} {b} {c} {d} {e};')
 
   candidates: list[str] = []
   positions = [0 for _ in buckets]

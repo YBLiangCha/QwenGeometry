@@ -51,7 +51,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `postrun_signal_repeat_depth24_queue_v1`
+  `high_value_template_backfill_queue_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -93,6 +93,10 @@ load TkAgg.
 - Candidate-signal rows are repeated by `SIGNAL_REPEAT=4` by default in the
   postrun SFT train mix, so the new DDAR-progress positives are not swamped by
   the larger fact-context replay set. Evaluation rows are not repeated.
+- Template backfill now includes high-value construction families such as
+  `angle_bisector`, `angle_mirror`, `on_aline`, `on_aline2`, and
+  `eqangle3`, giving the clean rerun more diverse fallback candidates after
+  LM/canonical duplicate collapse.
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

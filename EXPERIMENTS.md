@@ -46,6 +46,10 @@ changes. Tags are the practical version identifiers for this workspace.
   - skipped no-fact rows: 115
   - reconstruction/value errors: 494
   - row wall-time timeouts: 6
+- Training completed: 2026-06-07 20:48 +0800.
+- Final adapter size: 155 MB `adapter_model.safetensors`.
+- Final eval loss: 0.1574.
+- Train runtime: 1521 sec, 267 optimizer steps, 1 epoch.
 - Improvements over `factctx_top8_after_v3_v1`:
   - Uses Stage2 aux SFT prompts instead of relying mostly on JGEX clause mining.
   - Carries the original goal back into the reconstructed problem when possible.
@@ -61,6 +65,8 @@ changes. Tags are the practical version identifiers for this workspace.
 - Value model: prefer `outputs/candidate_value_model_v5_timeout_hardneg_features_v1_plus_v3/candidate_value_model.json`
 - Output: `outputs/final_eval_imo_ag30_qwen_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_v1`
 - Purpose: rerun the same 16 unsolved problems with prompt-augmented fact-context SFT, v5 value model, grammar-prefix token mask, true overgeneration, post-canonical backfill, and hard-negative signal logging.
+- Started: 2026-06-07 20:52 +0800.
+- Confirmed runtime flags: `beam_size=64`, `search_depth=4`, `num_return_sequences=32`, `candidate_depth_eval_limit=16`, `candidate_ddar_workers=8`, `lm_fact_context_top_k=8`, `candidate_dsl_token_mask`, `candidate_point_mask`, `candidate_point_repair`, `candidate_canonical_dedup`, `candidate_template_backfill`, `candidate_rerank=value_model_diverse`.
 
 ### `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_v1`
 

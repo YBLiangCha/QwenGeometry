@@ -708,7 +708,7 @@ def template_backfill_candidates(
   pts = sorted(point_names, key=lambda point: (point not in preferred_points, point))
   if not new_point or len(pts) < 3:
     return []
-  buckets: list[list[str]] = [[] for _ in range(16)]
+  buckets: list[list[str]] = [[] for _ in range(22)]
   seen_canonical: set[str] = set()
 
   def prefer_key(item: tuple[str, ...]) -> tuple[int, tuple[str, ...]]:
@@ -774,7 +774,7 @@ def template_backfill_candidates(
     add(4, f'{new_point} : T {new_point} {a} {b} {c} 00 ;')
     add(5, f'{new_point} : D {new_point} {a} {b} {c} 00 ;')
   for a, b in selected_pairs[:12]:
-    add(6, f'{new_point} = on_circle {new_point} {a} {b};')
+    add(6, f'{new_point} : D {new_point} {a} {b} {a} 00 ;')
     add(7, f'{new_point} : D {new_point} {a} {new_point} {b} 00 ;')
     add(8, f'{new_point} : D {new_point} {a} {new_point} {b} 00 C {new_point} {a} {b} 01 ;')
     add(9, f'{new_point} : T {new_point} {a} {new_point} {b} 00 ;')
@@ -783,6 +783,34 @@ def template_backfill_candidates(
     add(11, f'{new_point} = angle_mirror {new_point} {a} {b} {c};')
   for a, b, c, d in spread(disjoint_pair_sets, 12):
     add(12, f'{new_point} : T {new_point} {a} {new_point} {b} 00 C {new_point} {c} {d} 01 ;')
+  pair_triples = []
+  seen_pair_triples = set()
+  for a, b in selected_pairs:
+    for c, d, e in selected_triples:
+      item = (a, b, c, d, e)
+      if item in seen_pair_triples:
+        continue
+      if len({a, b, c, d, e}) < 4:
+        continue
+      pair_triples.append(item)
+      seen_pair_triples.add(item)
+      if len(pair_triples) >= 24:
+        break
+    if len(pair_triples) >= 24:
+      break
+  for a, b, c, d, e in pair_triples[:12]:
+    add(16, f'{new_point} : D {new_point} {a} {b} {a} 00 C {new_point} {c} {d} 01 ;')
+    add(17, f'{new_point} : O {new_point} {c} {d} {e} 00 C {new_point} {a} {b} 01 ;')
+    add(20, f'{new_point} : D {new_point} {a} {b} {a} 00 T {new_point} {c} {d} {e} 01 ;')
+    add(21, f'{new_point} : D {new_point} {c} {d} {e} 00 C {new_point} {a} {b} 01 ;')
+  disjoint_triples = []
+  for i, (a, b, c) in enumerate(selected_triples):
+    for d, e, f in selected_triples[i + 1 :]:
+      if {a, b, c}.isdisjoint({d, e, f}):
+        disjoint_triples.append((a, b, c, d, e, f))
+  for a, b, c, d, e, f in spread(disjoint_triples, 12):
+    add(18, f'{new_point} : O {new_point} {a} {b} {c} 00 O {new_point} {d} {e} {f} 01 ;')
+    add(19, f'{new_point} : T {new_point} {a} {b} {c} 00 T {new_point} {d} {e} {f} 01 ;')
   selected_quintuples = []
   seen_quintuples = set()
   for a, b in selected_pairs:

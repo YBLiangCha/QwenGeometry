@@ -86,6 +86,15 @@ def parse_args() -> argparse.Namespace:
       action='store_true',
       help='include reason/DDAR-status features; off for online-rerank evaluation',
   )
+  parser.add_argument(
+      '--exclude_reasons',
+      default='duplicate_canonical',
+      help=(
+          'comma-separated row reasons to exclude before scoring; '
+          'duplicate_canonical is excluded by default because online reranking '
+          'happens after canonical dedup'
+      ),
+  )
   return parser.parse_args()
 
 
@@ -128,11 +137,21 @@ def main() -> None:
   top_ks = [int(value) for value in args.top_k.split(',') if value.strip()]
 
   input_rows = load_jsonl(data_path)
+  excluded_reasons = {
+      reason.strip()
+      for reason in args.exclude_reasons.split(',')
+      if reason.strip()
+  }
   rows = [
       row
       for row in input_rows
       if not args.valid_only or is_valid_online_candidate(row)
   ]
+  if excluded_reasons:
+    rows = [
+        row for row in rows
+        if str(row.get('reason') or '') not in excluded_reasons
+    ]
   if args.split:
     rows = [row for row in rows if str(row.get('split') or '') == args.split]
   scored_rows = []
@@ -204,6 +223,7 @@ def main() -> None:
       'evaluation_feature_policy': (
           'posthoc_features' if args.include_posthoc_features else 'pre_ddar_features'
       ),
+      'excluded_reasons': sorted(excluded_reasons),
       'valid_only': args.valid_only,
       'split': args.split or None,
       'group_by': fields,

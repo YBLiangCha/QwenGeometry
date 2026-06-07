@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `duplicate_canonical_negative_signal_v1`
+- Current GitHub source head: `value_model_v11_default_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -16,9 +16,9 @@ changes. Tags are the practical version identifiers for this workspace.
   `duplicate_canonical_negative_signal_v1`, because the process was already
   running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `duplicate_canonical_negative_signal_v1`, optionally with a new bench tag such
+  `value_model_v11_default_v1`, optionally with a new bench tag such
   as
-  `unsolved_factctx_promptaug_top8_adapter_value_v7_grammar_semantic_v4_scores_dedup_dupneg_v1`.
+  `unsolved_factctx_promptaug_top8_adapter_value_v11_grammar_semantic_v4_scores_dedup_dupneg_v1`.
 - Remote running-workspace scripts are intentionally not overwritten while
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
   is active. The benchmark uses spawn-based candidate workers, so overwriting
@@ -63,6 +63,38 @@ changes. Tags are the practical version identifiers for this workspace.
 - Main observed bottleneck: canonical duplicate collapse remained very high; several problems were DDAR-timeout blocked or made symbolic progress in the wrong direction.
 
 ## Value Models
+
+### `v11_logistic_preddar_nodup_semantic_v3_partial6events5summary_v1`
+
+- Output:
+  `outputs/candidate_value_model_v11_logistic_preddar_nodup_semantic_v3_partial6events5summary_v1`
+- Model file:
+  `outputs/candidate_value_model_v11_logistic_preddar_nodup_semantic_v3_partial6events5summary_v1/candidate_value_model.json`
+- Objective: `logistic`; feature policy: `pre_ddar_features`;
+  `train_valid_only=true`; `excluded_reasons=["duplicate_canonical"]`.
+- Data: v5 base value data plus current semantic-v3 partial value rows after
+  6 event files and 5 summary rows, including the in-progress
+  `translated_imo_2009_p2` snapshot.
+- Rows before training filter: 9389 total, with 2651
+  `duplicate_canonical` rows retained in the data file for analysis.
+- Rows after online-rerank filter: 4110 valid non-duplicate rows with
+  748 positives and 3362 negatives.
+- Offline top-k diagnostics on that same online-rerank distribution:
+  - v6: AUC 0.8282; first-positive mean rank 1.49; top-8 recall 0.3476;
+    top-16 recall 0.6511.
+  - v7: AUC 0.6082; first-positive mean rank 1.08; top-8 recall 0.3770;
+    top-16 recall 0.6444.
+  - v8: AUC 0.6398; first-positive mean rank 1.06; top-8 recall 0.3877;
+    top-16 recall 0.6377.
+  - v10: AUC 0.6231; first-positive mean rank 1.06; top-8 recall 0.3757;
+    top-16 recall 0.6444.
+  - v11: AUC 0.8584; first-positive mean rank 1.16; top-8 recall 0.3944;
+    top-16 recall 0.6684.
+- Held-out eval remains tiny: 71 valid rows, 20 positives, 4 positive groups.
+  v11 keeps top-16 recall at 1.0 there but does not dominate v7/v8 on top-8.
+- Readout: v11 is the best current model for the actual top-16 DDAR budget on
+  the partial online-rerank pool, so it becomes the preferred value model for
+  the next clean rerun, with v7, v6, v5, and v4 retained as fallbacks.
 
 ### `v8_pairwise_preddar_v5_plus_semantic_v3_partial5_typed_v1`
 

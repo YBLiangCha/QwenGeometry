@@ -186,6 +186,15 @@ def parse_args() -> argparse.Namespace:
           'off by default because online reranking happens before DDAR'
       ),
   )
+  parser.add_argument(
+      '--exclude_reasons',
+      default='duplicate_canonical',
+      help=(
+          'comma-separated row reasons to exclude from training/eval; '
+          'duplicate_canonical is excluded by default because online reranking '
+          'happens after canonical dedup'
+      ),
+  )
   return parser.parse_args()
 
 
@@ -275,6 +284,16 @@ def train_pairwise(
 def main() -> None:
   args = parse_args()
   rows = load_rows(Path(args.train_file))
+  excluded_reasons = {
+      reason.strip()
+      for reason in args.exclude_reasons.split(',')
+      if reason.strip()
+  }
+  if excluded_reasons:
+    rows = [
+        row for row in rows
+        if str(row.get('reason') or '') not in excluded_reasons
+    ]
   if args.train_valid_only:
     rows = [row for row in rows if is_valid_online_candidate(row)]
   train_rows = [row for row in rows if row.get('split', 'train') == 'train']
@@ -315,6 +334,7 @@ def main() -> None:
           if args.include_posthoc_features
           else 'pre_ddar_features'
       ),
+      'excluded_reasons': sorted(excluded_reasons),
       'train_valid_only': args.train_valid_only,
       'training_details': training_details,
       'weights': weights,
@@ -359,6 +379,7 @@ def main() -> None:
               'format',
               'objective',
               'feature_policy',
+              'excluded_reasons',
               'train_valid_only',
               'training_details',
               'train_file',

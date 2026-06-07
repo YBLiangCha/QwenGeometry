@@ -73,6 +73,14 @@ _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG = (
     set(_CONSTRUCTIVE_ARG_ARITY) - {'eqangle3'}
 )
 _CONSTRAINED_PROMPT_PREFIXES = ('', 'C', 'O', 'P', 'T', 'D', '^')
+_CONSTRAINED_PREDICATE_ALIASES = {
+    'T': 'perp',
+    'P': 'para',
+    'D': 'cong',
+    'C': 'coll',
+    'O': 'cyclic',
+    '^': 'eqangle',
+}
 _DSL_TOKEN_CHARS = set(
     'abcdefghijklmnopqrstuvwxyz'
     'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -381,6 +389,8 @@ def candidate_dsl_shape_error(text: str) -> str | None:
       return 'constructed_point_not_in_predicate'
     if any(not _POINT_RE.match(arg) for arg in args):
       return 'invalid_predicate_arg'
+    if not _predicate_args_shape_ok(point, name, args):
+      return 'invalid_predicate_args'
   return None
 
 
@@ -396,6 +406,21 @@ def _arity_min_max(arity: int | tuple[int, ...]) -> tuple[int, int]:
 
 def _arity_accepts(count: int, arity: int | tuple[int, ...]) -> bool:
   return count in arity if isinstance(arity, tuple) else count == arity
+
+
+def _predicate_args_shape_ok(point: str, name: str, args: list[str]) -> bool:
+  mapped_name = _CONSTRAINED_PREDICATE_ALIASES.get(name, name)
+  if not check_valid_args(mapped_name, args):
+    return False
+  if name not in {'^', 'eqangle'}:
+    return True
+  try:
+    construction_name, construction_args = translate_constrained_to_constructive(
+        point, name, args
+    )
+  except Exception:  # pylint: disable=broad-except
+    return False
+  return construction_name != 'on_aline' or construction_args.count(point) <= 1
 
 
 def _dsl_tokenize_prefix(text: str) -> list[str]:
@@ -442,6 +467,8 @@ def _parse_constrained_prefix(
           return 'invalid'
         if point not in args:
           return 'invalid'
+        if not _predicate_args_shape_ok(point, pred, args):
+          return 'invalid'
         index += 1
         if index >= len(tokens):
           return 'possible'
@@ -461,11 +488,15 @@ def _parse_constrained_prefix(
       if has_semicolon:
         if not _arity_accepts(len(args), arity) or point not in args:
           return 'invalid'
+        if not _predicate_args_shape_ok(point, pred, args):
+          return 'invalid'
         return 'complete'
       return 'possible'
 
     if index < len(tokens) and tokens[index] == ';':
       if not _arity_accepts(len(args), arity) or point not in args:
+        return 'invalid'
+      if not _predicate_args_shape_ok(point, pred, args):
         return 'invalid'
       return 'complete'
   return 'possible'

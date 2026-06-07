@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `preddar_value_model_v6_partial_v1`
+- Current GitHub source head: `next_ablation_uses_preddar_v6_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -15,7 +15,7 @@ changes. Tags are the practical version identifiers for this workspace.
   or `template_backfill_seen_canonical_v1`, because the process was already
   running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `preddar_value_model_v6_partial_v1`, optionally with a new bench tag such as
+  `next_ablation_uses_preddar_v6_v1`, optionally with a new bench tag such as
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_dedup_v1`.
 - Remote running-workspace scripts are intentionally not overwritten while
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
@@ -234,6 +234,17 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: current best partial SFT/hard-negative snapshot while waiting for the full 16-problem run.
 
 ## Next Candidate-Quality Fixes
+
+### `next_ablation_uses_preddar_v6_v1`
+
+- `data/synth_cpt_1m_pruned_v2/run_fact_context_unsolved_ablation.sh` now
+  defaults `VALUE_MODEL_PREFERRED` to
+  `outputs/candidate_value_model_v6_preddar_v5_plus_semantic_v3_partial4_typed_v1/candidate_value_model.json`.
+- `VALUE_MODEL_FALLBACK` now points to the prior v5 model, and
+  `VALUE_MODEL_LEGACY_FALLBACK` keeps the older v4 fallback.
+- Purpose: ensure the next clean fact-context unsolved rerun uses the corrected
+  pre-DDAR reranker by default, while preserving an explicit override through
+  `QWEN_CANDIDATE_VALUE_MODEL`.
 
 ### `preddar_value_model_v6_partial_v1`
 

@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `new_solved_baseline_highlight_v1`
+- Current GitHub source head: `preddar_value_model_v6_partial_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -15,7 +15,7 @@ changes. Tags are the practical version identifiers for this workspace.
   or `template_backfill_seen_canonical_v1`, because the process was already
   running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `new_solved_baseline_highlight_v1`, optionally with a new bench tag such as
+  `preddar_value_model_v6_partial_v1`, optionally with a new bench tag such as
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_dedup_v1`.
 - Remote running-workspace scripts are intentionally not overwritten while
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
@@ -37,6 +37,43 @@ changes. Tags are the practical version identifiers for this workspace.
 - Main observed bottleneck: canonical duplicate collapse remained very high; several problems were DDAR-timeout blocked or made symbolic progress in the wrong direction.
 
 ## Value Models
+
+### `v6_preddar_v5_plus_semantic_v3_partial4_typed_v1`
+
+- Output: `outputs/candidate_value_model_v6_preddar_v5_plus_semantic_v3_partial4_typed_v1`
+- Model file: `outputs/candidate_value_model_v6_preddar_v5_plus_semantic_v3_partial4_typed_v1/candidate_value_model.json`
+- Source script: `data/synth_cpt_1m_pruned_v2/run_value_model_append_partial.sh`
+- Built with updated `train_candidate_value_model.py` using `feature_policy=pre_ddar_features`.
+- Important fix: default value-model features now exclude post-DDAR/verdict fields
+  such as `reason=...`, `candidate_ddar_status`, and `candidate_ddar_error`.
+  Online reranking happens before DDAR, so those fields would be label leakage
+  in training.
+- Data: v5 base value data plus current semantic-v3 partial value rows, rebuilt
+  from the live four-event-file benchmark snapshot.
+- Rows: 7273 total, 715 positive, 6558 negative.
+- Source counts after dedup: `v1`: 287, `v3`: 1858,
+  `semantic_v3_partial`: 5128.
+- Candidate sources: `lm`: 7027, `template_post_canonical_backfill`: 246.
+- Main reasons: `valid_but_unsolved`: 2716, `valid_nonwinning`: 1567,
+  `point_too_close`: 1223, `ddar_progress_positive`: 712,
+  `other_error`: 527, `point_too_far`: 283.
+- Metrics without post-hoc leakage:
+  - train: accuracy 0.9113, loss 0.2792, AUC 0.9056
+  - eval: accuracy 0.7651, loss 0.8100, AUC 0.8101
+- Sanity checks: model `feature_policy` is `pre_ddar_features`; no
+  `reason=` or `ddar_status=` weights are present.
+- Purpose: replace the v5/v6-posthoc reranker with a model trained on features
+  that are actually available before candidate DDAR evaluation.
+
+### `v6_v5_plus_semantic_v3_partial4_typed_v1`
+
+- Output: `outputs/candidate_value_model_v6_v5_plus_semantic_v3_partial4_typed_v1`
+- Status: scratch model only; do not use as the recommended reranker.
+- Issue found after training: the old value-model training tokenization included
+  post-DDAR/verdict fields such as `reason=ddar_progress_positive` and
+  `ddar_status=saturated`, producing unrealistically perfect metrics. This
+  motivated the `pre_ddar_features` fix and the replacement model
+  `v6_preddar_v5_plus_semantic_v3_partial4_typed_v1`.
 
 ### `value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
 
@@ -197,6 +234,24 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: current best partial SFT/hard-negative snapshot while waiting for the full 16-problem run.
 
 ## Next Candidate-Quality Fixes
+
+### `preddar_value_model_v6_partial_v1`
+
+- `scripts/train_candidate_value_model.py` now defaults to pre-DDAR feature
+  training. It excludes `reason`, `candidate_ddar_status`, and
+  `candidate_ddar_error` unless `--include_posthoc_features` is explicitly set.
+- `scripts/qwen_ag_search.py` online value-model scoring now mirrors that
+  pre-DDAR feature policy: raw candidate text, translated construction,
+  construction type/type combo, translation error class, and candidate source.
+- New orchestration script:
+  `data/synth_cpt_1m_pruned_v2/run_value_model_append_partial.sh`.
+  It builds value rows from a partial benchmark event directory, appends them to
+  an existing value dataset, writes a merge summary, and trains a JSON reranker.
+- Smoke check verified that default training tokens contain no `reason=`,
+  `ddar_status=`, or post-DDAR timeout error tokens, while
+  `--include_posthoc_features` still exposes them for controlled ablations.
+- Remote training produced the recommended next-rerun model
+  `v6_preddar_v5_plus_semantic_v3_partial4_typed_v1`.
 
 ### `new_solved_baseline_highlight_v1`
 

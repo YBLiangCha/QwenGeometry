@@ -49,7 +49,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `new_solved_baseline_highlight_v1`
+  `preddar_value_model_v6_partial_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -58,6 +58,8 @@ load TkAgg.
   `factctx_promptaug_top8_stage2max2000_v1`
 - Current timeout/hard-negative value model:
   `v5_timeout_hardneg_features_v1_plus_v3`
+- Current recommended pre-DDAR partial value model for the next clean rerun:
+  `v6_preddar_v5_plus_semantic_v3_partial4_typed_v1`
 - Next clean candidate-quality code baseline after the running process:
   `semantic_point_mask_v4`, `value_rerank_event_scores_v1`, and
   `template_backfill_seen_canonical_v1`, `generation_canonical_dedup_v1`, and
@@ -70,6 +72,10 @@ load TkAgg.
 - Reports can highlight newly solved problems by running
   `scripts/analyze_qwen_ag_events.py --baseline_summary_jsonl <previous-summary.jsonl>`
   before rendering with `scripts/report_qwen_ag_analysis.py`.
+- Value/reranker training defaults to pre-DDAR features only. Use
+  `data/synth_cpt_1m_pruned_v2/run_value_model_append_partial.sh` to append
+  partial benchmark value rows to an existing value dataset and train the next
+  lightweight JSON reranker.
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

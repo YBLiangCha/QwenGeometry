@@ -45,18 +45,18 @@ def add_prefixed_token(tokens: list[str], prefix: str, value: Any) -> None:
     tokens.append(f'{prefix}={normalized}')
 
 
-def tokens_for_row(row: dict[str, Any]) -> list[str]:
+def tokens_for_row(
+    row: dict[str, Any], include_posthoc_features: bool = False
+) -> list[str]:
   raw = str(row.get('raw') or '')
   translation = str(row.get('translation') or '')
   construction_type = str(row.get('construction_type') or '')
+  text_parts = [raw, translation, construction_type]
+  if include_posthoc_features:
+    text_parts.append(str(row.get('candidate_ddar_error') or ''))
   text = ' '.join(
       str(value or '')
-      for value in (
-          raw,
-          translation,
-          construction_type,
-          row.get('candidate_ddar_error'),
-      )
+      for value in text_parts
   )
   tokens = [tok.lower() for tok in re.findall(r'[A-Za-z_^]+|[0-9]+', text)]
   for name in construction_type.split('+'):
@@ -64,12 +64,13 @@ def tokens_for_row(row: dict[str, Any]) -> list[str]:
       tokens.append('type=' + name)
   add_prefixed_token(tokens, 'type_combo', construction_type)
   error = classify_error(translation)
-  if error == 'not_error':
+  if include_posthoc_features and error == 'not_error':
     error = classify_error(str(row.get('candidate_ddar_error') or ''))
   add_prefixed_token(tokens, 'error', error)
-  add_prefixed_token(tokens, 'reason', row.get('reason'))
   add_prefixed_token(tokens, 'source', row.get('source'))
-  add_prefixed_token(tokens, 'ddar_status', row.get('candidate_ddar_status'))
+  if include_posthoc_features:
+    add_prefixed_token(tokens, 'reason', row.get('reason'))
+    add_prefixed_token(tokens, 'ddar_status', row.get('candidate_ddar_status'))
   return tokens
 
 
@@ -93,7 +94,12 @@ def load_rows(path: Path) -> list[dict[str, Any]]:
   return rows
 
 
-def metrics(rows: list[dict[str, Any]], weights: dict[str, float], bias: float):
+def metrics(
+    rows: list[dict[str, Any]],
+    weights: dict[str, float],
+    bias: float,
+    include_posthoc_features: bool = False,
+):
   if not rows:
     return {'rows': 0}
   preds = []
@@ -101,7 +107,13 @@ def metrics(rows: list[dict[str, Any]], weights: dict[str, float], bias: float):
   loss = 0.0
   for row in rows:
     y = int(row.get('label', 0))
-    p = sigmoid(score(weights, bias, tokens_for_row(row)))
+    p = sigmoid(
+        score(
+            weights,
+            bias,
+            tokens_for_row(row, include_posthoc_features=include_posthoc_features),
+        )
+    )
     preds.append((p, y))
     correct += int((p >= 0.5) == bool(y))
     loss += -(y * math.log(max(p, 1e-9)) + (1 - y) * math.log(max(1 - p, 1e-9)))
@@ -135,6 +147,14 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument('--l2', type=float, default=1e-5)
   parser.add_argument('--seed', type=int, default=7)
   parser.add_argument('--min_abs_weight', type=float, default=1e-6)
+  parser.add_argument(
+      '--include_posthoc_features',
+      action='store_true',
+      help=(
+          'include DDAR/verdict features such as reason and candidate_ddar_status; '
+          'off by default because online reranking happens before DDAR'
+      ),
+  )
   return parser.parse_args()
 
 
@@ -159,7 +179,9 @@ def main() -> None:
   for _ in range(args.epochs):
     rng.shuffle(train_rows)
     for row in train_rows:
-      toks = tokens_for_row(row)
+      toks = tokens_for_row(
+          row, include_posthoc_features=args.include_posthoc_features
+      )
       y = int(row.get('label', 0))
       weight = pos_weight if y == 1 else 1.0
       p = sigmoid(score(weights, bias, toks))
@@ -176,6 +198,11 @@ def main() -> None:
   }
   model = {
       'format': 'qwen_ag_candidate_value_v1',
+      'feature_policy': (
+          'posthoc_features'
+          if args.include_posthoc_features
+          else 'pre_ddar_features'
+      ),
       'weights': weights,
       'bias': bias,
       'train_file': args.train_file,
@@ -189,8 +216,18 @@ def main() -> None:
           'all_negative': len(rows) - sum(int(row.get('label', 0)) for row in rows),
       },
       'metrics': {
-          'train': metrics(train_rows, weights, bias),
-          'eval': metrics(eval_rows, weights, bias),
+          'train': metrics(
+              train_rows,
+              weights,
+              bias,
+              include_posthoc_features=args.include_posthoc_features,
+          ),
+          'eval': metrics(
+              eval_rows,
+              weights,
+              bias,
+              include_posthoc_features=args.include_posthoc_features,
+          ),
       },
       'warnings': [],
   }

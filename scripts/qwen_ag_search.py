@@ -938,7 +938,6 @@ def _candidate_value_tokens(record: dict[str, Any]) -> list[str]:
           raw,
           translation,
           type_key,
-          record.get('candidate_ddar_error'),
       )
   )
   tokens = []
@@ -949,14 +948,8 @@ def _candidate_value_tokens(record: dict[str, Any]) -> list[str]:
       tokens.append('type=' + name)
   add_candidate_value_feature(tokens, 'type_combo', type_key)
   error = candidate_value_error_key(translation)
-  if error == 'not_error':
-    error = candidate_value_error_key(str(record.get('candidate_ddar_error') or ''))
   add_candidate_value_feature(tokens, 'error', error)
-  add_candidate_value_feature(tokens, 'reason', record.get('reason'))
   add_candidate_value_feature(tokens, 'source', record.get('source'))
-  add_candidate_value_feature(
-      tokens, 'ddar_status', record.get('candidate_ddar_status')
-  )
   return tokens
 
 

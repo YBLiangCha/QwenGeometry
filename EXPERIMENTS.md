@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current source head: `template_backfill_seen_canonical_v1`
+- Current GitHub source head: `template_backfill_seen_canonical_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -17,6 +17,11 @@ changes. Tags are the practical version identifiers for this workspace.
 - Next clean code baseline for a rerun: source head
   `template_backfill_seen_canonical_v1`, optionally with a new bench tag such as
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_v1`.
+- Remote running-workspace scripts are intentionally not overwritten while
+  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
+  is active. The benchmark uses spawn-based candidate workers, so overwriting
+  `scripts/` mid-run could mix code versions in future workers. Sync the new
+  source after this run completes or immediately before launching the next tag.
 
 ## Completed Bench
 

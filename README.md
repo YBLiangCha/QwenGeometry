@@ -48,7 +48,7 @@ load TkAgg.
 
 ## Current Main Tags
 
-- Current source head:
+- Current GitHub source head:
   `template_backfill_seen_canonical_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
@@ -87,6 +87,9 @@ python scripts/analyze_qwen_ag_events.py --help
 - Bench tags track generated output directories and runtime configurations.
 - A running benchmark keeps the Python code it loaded at process start; later git
   commits apply only to future runs unless the benchmark is restarted.
+- Do not overwrite `scripts/` in the remote running workspace while a
+  spawn-based benchmark is active; sync new source after that run completes or
+  before launching a new tag.
 - Use experiment tags as version identifiers for model/data/search changes.
 - Do not overwrite completed `outputs/final_eval_*` directories.
 - Create a new tag when changing training data, prompt schema, candidate

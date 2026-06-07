@@ -880,6 +880,43 @@ def candidate_rerank_score(auxstring: str) -> int:
   return score
 
 
+def interleave_ranked_records_by_node(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+  """Keep depth-level candidate evaluation from collapsing onto one beam node."""
+  if len(records) <= 1 or not any('node_index' in record for record in records):
+    return records
+  buckets: dict[int, list[dict[str, Any]]] = {}
+  node_scores: dict[int, float] = {}
+  missing_node: list[dict[str, Any]] = []
+  for rank, record in enumerate(records):
+    node_index = record.get('node_index')
+    if not isinstance(node_index, int):
+      missing_node.append(record)
+      continue
+    buckets.setdefault(node_index, []).append(record)
+    score = float(record.get('_candidate_rerank_score', 0.0))
+    # Tiny rank tie-break keeps the previous global rerank order stable.
+    score -= 1e-6 * rank
+    node_scores[node_index] = max(node_scores.get(node_index, -10.0), score)
+  if len(buckets) <= 1:
+    return records
+  ordered_nodes = sorted(
+      buckets,
+      key=lambda node: (-node_scores[node], node),
+  )
+  interleaved: list[dict[str, Any]] = []
+  while len(interleaved) < len(records) - len(missing_node):
+    progressed = False
+    for node in ordered_nodes:
+      if buckets[node]:
+        interleaved.append(buckets[node].pop(0))
+        progressed = True
+    if not progressed:
+      break
+  return interleaved + missing_node
+
+
 def rerank_candidate_records(
     records: list[dict[str, Any]],
     strategy: str,
@@ -931,7 +968,7 @@ def rerank_candidate_records(
         progressed = True
     if not progressed:
       break
-  return reranked
+  return interleave_ranked_records_by_node(reranked)
 
 
 def normalize_candidate_value_feature(value: Any) -> str:

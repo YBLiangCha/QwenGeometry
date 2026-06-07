@@ -1,0 +1,42 @@
+# Python/runtime caches
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Large model/checkpoint artifacts
+models/
+checkpoints/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# AlphaGeometry/Qwen runtime checkouts and generated outputs
+repos/
+outputs/
+wandb/
+runs/
+
+# Generated data and logs
+data/staged_*/
+*.jsonl
+*.log
+*.pid
+*.out
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

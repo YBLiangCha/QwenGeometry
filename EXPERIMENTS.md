@@ -91,6 +91,8 @@ changes. Tags are the practical version identifiers for this workspace.
 - Started: 2026-06-07 21:38 +0800.
 - Purpose: rerun the 16 unsolved problems with all semantic point-mask fixes through `semantic_point_mask_v3`.
 - Queue PIDs at launch: ablation `762611`, candidate signal data `762612`, candidate signal SFT `762613`.
+- First-problem check at 2026-06-07 21:49 +0800: `translated_imo_2000_p6` completed unsolved, 49 candidates, 39 valid, 10 invalid, 3 duplicate-canonical filters, 16 candidate DDAR errors/timeouts. The run then advanced to `translated_imo_2004_p1`.
+- Early readout: v3 removed most invalid-predicate/unknown-point noise from the first problem, but `translated_imo_2000_p6` is still candidate-DDAR-timeout blocked.
 
 ## Next Candidate-Quality Fixes
 

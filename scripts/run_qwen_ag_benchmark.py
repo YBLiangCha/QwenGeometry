@@ -1213,7 +1213,7 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument(
       '--candidate_hard_negative_signal_reasons',
-      default='point_too_close,point_too_far,point_already_exists',
+      default='point_too_close,point_too_far,point_already_exists,unknown_point',
       help='comma-separated invalid-construction reasons to log as hard-negative signals',
   )
   return parser.parse_args()

@@ -24,6 +24,7 @@ changes. Tags are the practical version identifiers for this workspace.
 - Data sources: baseline v1 logs plus completed v3 logs.
 - Added signals: timeout negatives, PointTooClose/PointTooFar/point-already-exists hard negatives, candidate source features.
 - Purpose: rerank valid candidates before DDAR and reduce wasted DDAR budget.
+- Follow-up instrumentation: candidate rerank scores are now attached to pruned, evaluated, DDAR-done, and DDAR-error events so timeout-heavy value-model decisions can be audited directly in later runs.
 
 ## Fact-Context Adapters
 

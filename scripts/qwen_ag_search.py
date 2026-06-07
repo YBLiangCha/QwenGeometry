@@ -800,9 +800,13 @@ def rerank_candidate_records(
   if strategy == 'value_model':
     if value_model is None:
       raise ValueError('--candidate_value_model is required for value_model rerank')
+    for record in records:
+      record['_candidate_rerank_score'] = score_candidate_value_model(
+          value_model, record
+      )
     return sorted(
         records,
-        key=lambda record: score_candidate_value_model(value_model, record),
+        key=lambda record: record['_candidate_rerank_score'],
         reverse=True,
     )
   if strategy == 'value_model_diverse':

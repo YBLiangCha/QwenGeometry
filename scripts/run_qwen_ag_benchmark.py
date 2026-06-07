@@ -99,6 +99,9 @@ def run_candidate_ddar_worker(task: dict[str, Any]) -> dict[str, Any]:
         'tag': task['tag'],
         'status': status,
         'solved': solved,
+        'candidate_rerank_score': task.get('candidate_rerank_score'),
+        'candidate_source': task.get('candidate_source'),
+        'candidate_construction_type': task.get('candidate_construction_type'),
         'levels': len(level_times),
         'level_times': [round(x, 3) for x in level_times],
         'branches': branches,
@@ -144,6 +147,9 @@ def make_candidate_task(
     wall_timeout: int | None,
     fact_context_top_k: int = 0,
     prompt: str | None = None,
+    candidate_rerank_score: float | None = None,
+    candidate_source: str | None = None,
+    candidate_construction_type: str | None = None,
 ) -> dict[str, Any]:
   raw_text = raw.strip()
   new_point = None
@@ -165,6 +171,9 @@ def make_candidate_task(
       'wall_timeout': wall_timeout,
       'fact_context_top_k': fact_context_top_k,
       'fact_context_recent_points': [new_point] if new_point else [],
+      'candidate_rerank_score': candidate_rerank_score,
+      'candidate_source': candidate_source,
+      'candidate_construction_type': candidate_construction_type,
       'tag': f'depth{depth}:{raw}',
   }
 
@@ -634,6 +643,10 @@ def solve_one(
                 translation=record['translation'],
                 reason='rank_pruned',
                 candidate_rerank=args.candidate_rerank,
+                candidate_rerank_score=record.get('_candidate_rerank_score'),
+                candidate_construction_type=qs.construction_type_key(
+                    record['translation']
+                ),
                 candidate_eval_limit=args.candidate_eval_limit,
                 source=record.get('source', 'lm'),
             )
@@ -658,6 +671,10 @@ def solve_one(
             translation=record['translation'],
             reason='depth_rank_pruned',
             candidate_rerank=args.candidate_rerank,
+            candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_construction_type=qs.construction_type_key(
+                record['translation']
+            ),
             candidate_depth_eval_limit=args.candidate_depth_eval_limit,
             source=record.get('source', 'lm'),
         )
@@ -682,6 +699,9 @@ def solve_one(
               candidate_wall_timeout,
               args.lm_fact_context_top_k,
               prompt=record['prompt'],
+              candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_source=record.get('source', 'lm'),
+              candidate_construction_type=qs.construction_type_key(translation),
           ))
           parallel_tasks[-1]['prev_score'] = record['prev_score']
           continue
@@ -745,6 +765,9 @@ def solve_one(
               raw=item['raw'],
               translation=item['translation'],
               error=item['error'],
+              candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_source=item.get('candidate_source'),
+              candidate_construction_type=item.get('candidate_construction_type'),
               traceback=item.get('traceback'),
               elapsed_sec=item.get('elapsed_sec'),
           )
@@ -913,6 +936,10 @@ def solve_one(
               translation=record['translation'],
               reason='rank_pruned',
               candidate_rerank=args.candidate_rerank,
+              candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_construction_type=qs.construction_type_key(
+                  record['translation']
+              ),
               candidate_eval_limit=args.candidate_eval_limit,
               source=record.get('source', 'lm'),
           )
@@ -937,6 +964,9 @@ def solve_one(
               candidate_wall_timeout,
               args.lm_fact_context_top_k,
               prompt=prompt,
+              candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_source=record.get('source', 'lm'),
+              candidate_construction_type=qs.construction_type_key(translation),
           ))
           continue
         p_new = pr.Problem.from_txt(p_new_txt, translate=False)
@@ -999,6 +1029,9 @@ def solve_one(
               raw=item['raw'],
               translation=item['translation'],
               error=item['error'],
+              candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_source=item.get('candidate_source'),
+              candidate_construction_type=item.get('candidate_construction_type'),
               traceback=item.get('traceback'),
               elapsed_sec=item.get('elapsed_sec'),
           )

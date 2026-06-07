@@ -39,11 +39,19 @@ changes. Tags are the practical version identifiers for this workspace.
 - Data: existing Stage2 aux SFT prompts are reconstructed into AG problems, DDAR is run on each prefix, and selected facts are inserted into `{D}`.
 - Build script: `scripts/build_fact_context_from_aux_sft.py`
 - Queue script: `data/synth_cpt_1m_pruned_v2/run_fact_context_prompt_aug_sft.sh`
+- Actual prompt-aug build from the first 2000 Stage2 rows:
+  - prompt-aug rows: 1385
+  - train/eval: 1236 / 149
+  - mixed train/eval: 4262 / 332
+  - skipped no-fact rows: 115
+  - reconstruction/value errors: 494
+  - row wall-time timeouts: 6
 - Improvements over `factctx_top8_after_v3_v1`:
   - Uses Stage2 aux SFT prompts instead of relying mostly on JGEX clause mining.
   - Carries the original goal back into the reconstructed problem when possible.
   - Adds progress logging during fact-context row construction.
-  - Expected to produce O(1000) fact-context rows from the first 2000 Stage2 rows.
+  - Adds per-row wall-time timeout so one pathological prompt cannot block the whole build.
+  - Produces O(1000) fact-context rows from the first 2000 Stage2 rows.
 
 ## Current Main Ablation Chain
 

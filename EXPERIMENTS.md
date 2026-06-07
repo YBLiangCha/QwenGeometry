@@ -3,6 +3,20 @@
 This file tracks experiment tags, output directories, and the main behavioral
 changes. Tags are the practical version identifiers for this workspace.
 
+## Source Version State
+
+- Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
+- Current source head: `value_rerank_event_scores_v1`
+- Current running bench tag:
+  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
+- Running bench code behavior: includes semantic point/predicate fixes through
+  `semantic_point_mask_v3`; it does not include later `semantic_point_mask_v4`
+  degenerate-construction filtering or candidate rerank-score event logging,
+  because the process was already running when those commits were made.
+- Next clean code baseline for a rerun: source head
+  `value_rerank_event_scores_v1`, optionally with a new bench tag such as
+  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_v1`.
+
 ## Completed Bench
 
 ### `unsolved_high_budget_value_v3_cost_template_depth16_v1`
@@ -94,6 +108,7 @@ changes. Tags are the practical version identifiers for this workspace.
 - Queue PIDs at launch: ablation `762611`, candidate signal data `762612`, candidate signal SFT `762613`.
 - First-problem check at 2026-06-07 21:49 +0800: `translated_imo_2000_p6` completed unsolved, 49 candidates, 39 valid, 10 invalid, 3 duplicate-canonical filters, 16 candidate DDAR errors/timeouts. The run then advanced to `translated_imo_2004_p1`.
 - Early readout: v3 removed most invalid-predicate/unknown-point noise from the first problem, but `translated_imo_2000_p6` is still candidate-DDAR-timeout blocked.
+- Live check at 2026-06-07 22:08 +0800: still running on `translated_imo_2004_p1`, summary rows 1/16. The second problem had reached depth 3 with 1789 candidates, 1489 filtered candidates, 862 canonical duplicates, 627 depth-rank prunes, 49 DDAR runs, 42 verifier-backed candidate SFT signals, and 100 hard-negative signals.
 
 ## Next Candidate-Quality Fixes
 

@@ -48,14 +48,18 @@ load TkAgg.
 
 ## Current Main Tags
 
+- Current source head:
+  `value_rerank_event_scores_v1`
+- Current running 16-problem bench:
+  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
   `unsolved_high_budget_value_v3_cost_template_depth16_v1`
 - Current fact-context adapter:
   `factctx_promptaug_top8_stage2max2000_v1`
-- Current pending 16-problem ablation:
-  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_v1`
 - Current timeout/hard-negative value model:
   `v5_timeout_hardneg_features_v1_plus_v3`
+- Next clean candidate-quality code baseline after the running process:
+  `semantic_point_mask_v4` plus `value_rerank_event_scores_v1`
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 
@@ -78,6 +82,10 @@ python scripts/analyze_qwen_ag_events.py --help
 
 ## Versioning Rules
 
+- Git commits and git tags track source-code behavior only.
+- Bench tags track generated output directories and runtime configurations.
+- A running benchmark keeps the Python code it loaded at process start; later git
+  commits apply only to future runs unless the benchmark is restarted.
 - Use experiment tags as version identifiers for model/data/search changes.
 - Do not overwrite completed `outputs/final_eval_*` directories.
 - Create a new tag when changing training data, prompt schema, candidate

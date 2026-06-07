@@ -7,6 +7,7 @@ import argparse
 from collections import Counter
 import json
 from pathlib import Path
+import signal
 import sys
 from typing import Any
 
@@ -22,6 +23,27 @@ GOAL_NAME_MAP = {
     'T': 'perp',
     '^': 'eqangle',
 }
+
+
+class RowTimeoutError(TimeoutError):
+  """Raised when one prompt row takes too long to reconstruct/DDAR."""
+
+
+def _row_timeout_handler(signum: int, frame: Any) -> None:  # pylint: disable=unused-argument
+  raise RowTimeoutError('row wall-time timeout')
+
+
+def run_with_row_timeout(timeout_sec: int, fn: Any, *args: Any) -> Any:
+  if timeout_sec <= 0 or not hasattr(signal, 'SIGALRM'):
+    return fn(*args)
+  old_handler = signal.getsignal(signal.SIGALRM)
+  signal.signal(signal.SIGALRM, _row_timeout_handler)
+  signal.alarm(timeout_sec)
+  try:
+    return fn(*args)
+  finally:
+    signal.alarm(0)
+    signal.signal(signal.SIGALRM, old_handler)
 
 
 def add_paths(ag_repo: str) -> None:
@@ -186,6 +208,12 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument('--eval_mod', type=int, default=10)
   parser.add_argument('--keep_no_fact_rows', action='store_true')
   parser.add_argument('--progress_every', type=int, default=50)
+  parser.add_argument(
+      '--row_wall_timeout',
+      type=int,
+      default=60,
+      help='wall-time timeout in seconds for each prompt row; <=0 disables',
+  )
   return parser.parse_args()
 
 
@@ -229,7 +257,9 @@ def main() -> None:
         continue
       seen.add(key)
       try:
-        facts, added, status = extract_facts(
+        facts, added, status = run_with_row_timeout(
+            args.row_wall_timeout,
+            extract_facts,
             row,
             pr,
             gh,

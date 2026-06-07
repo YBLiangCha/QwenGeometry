@@ -30,6 +30,7 @@ JGEX_FACT_EVAL=${JGEX_FACT_EVAL:-$JGEX_FACT_DIR/fact_context_aux_eval.jsonl}
 FACT_CONTEXT_TOP_K=${FACT_CONTEXT_TOP_K:-8}
 FACT_CONTEXT_MAX_LEVEL=${FACT_CONTEXT_MAX_LEVEL:-4}
 FACT_CONTEXT_DDAR_TIMEOUT=${FACT_CONTEXT_DDAR_TIMEOUT:-10}
+ROW_WALL_TIMEOUT=${ROW_WALL_TIMEOUT:-60}
 PROMPT_AUG_MAX_ROWS=${PROMPT_AUG_MAX_ROWS:-2000}
 OLD_FORMAT_MAX_ROWS=${OLD_FORMAT_MAX_ROWS:-3000}
 OLD_EVAL_MAX_ROWS=${OLD_EVAL_MAX_ROWS:-200}
@@ -39,7 +40,7 @@ DRY_RUN=${DRY_RUN:-0}
 export FACT_TAG FACT_DIR AUG_TRAIN AUG_EVAL AUG_SUMMARY MIXED_TRAIN MIXED_EVAL SUMMARY
 export BASE_ADAPTER OUT OLD_TRAIN OLD_EVAL JGEX_FACT_TRAIN JGEX_FACT_EVAL
 export FACT_CONTEXT_TOP_K FACT_CONTEXT_MAX_LEVEL FACT_CONTEXT_DDAR_TIMEOUT
-export PROMPT_AUG_MAX_ROWS OLD_FORMAT_MAX_ROWS OLD_EVAL_MAX_ROWS
+export ROW_WALL_TIMEOUT PROMPT_AUG_MAX_ROWS OLD_FORMAT_MAX_ROWS OLD_EVAL_MAX_ROWS
 
 if [ "$DRY_RUN" = "1" ]; then
   python - <<'PY'
@@ -54,6 +55,7 @@ print(json.dumps({
     'fact_context_top_k': int(os.environ.get('FACT_CONTEXT_TOP_K', '8')),
     'fact_context_max_level': int(os.environ.get('FACT_CONTEXT_MAX_LEVEL', '4')),
     'fact_context_ddar_timeout': int(os.environ.get('FACT_CONTEXT_DDAR_TIMEOUT', '10')),
+    'row_wall_timeout': int(os.environ.get('ROW_WALL_TIMEOUT', '60')),
 }, ensure_ascii=False, indent=2))
 PY
   exit 0
@@ -73,6 +75,7 @@ if [ ! -s "$AUG_SUMMARY" ]; then
     --fact_context_top_k "$FACT_CONTEXT_TOP_K" \
     --fact_context_max_level "$FACT_CONTEXT_MAX_LEVEL" \
     --fact_context_ddar_timeout "$FACT_CONTEXT_DDAR_TIMEOUT" \
+    --row_wall_timeout "$ROW_WALL_TIMEOUT" \
     --max_rows "$PROMPT_AUG_MAX_ROWS" \
     > "$FACT_DIR/build_prompt_aug.log" 2>&1
 fi

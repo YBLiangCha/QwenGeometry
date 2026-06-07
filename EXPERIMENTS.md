@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `next_ablation_uses_preddar_v6_v1`
+- Current GitHub source head: `value_model_topk_eval_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -15,7 +15,7 @@ changes. Tags are the practical version identifiers for this workspace.
   or `template_backfill_seen_canonical_v1`, because the process was already
   running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `next_ablation_uses_preddar_v6_v1`, optionally with a new bench tag such as
+  `value_model_topk_eval_v1`, optionally with a new bench tag such as
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_dedup_v1`.
 - Remote running-workspace scripts are intentionally not overwritten while
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
@@ -60,6 +60,19 @@ changes. Tags are the practical version identifiers for this workspace.
 - Metrics without post-hoc leakage:
   - train: accuracy 0.9113, loss 0.2792, AUC 0.9056
   - eval: accuracy 0.7651, loss 0.8100, AUC 0.8101
+- Offline top-k reranker diagnostics from
+  `scripts/evaluate_candidate_value_model.py`:
+  - All valid rows from the v6 merged partial data:
+    - v5 online/pre-DDAR AUC: 0.5638; top-16 group hit 0.9796; top-16 positive recall 0.6671.
+    - v6 online/pre-DDAR AUC: 0.8567; top-16 group hit 1.0000; top-16 positive recall 0.7063.
+  - Held-out `split=eval` valid rows are very small (71 rows, 20 positives,
+    4 positive groups):
+    - v5 online/pre-DDAR AUC: 0.7667; top-16 group hit 1.0000; top-16 positive recall 1.0000.
+    - v6 online/pre-DDAR AUC: 0.5196; top-16 group hit 1.0000; top-16 positive recall 1.0000.
+  - Readout: v6 is better on the larger partial pool and is feature-policy
+    correct, but the tiny held-out split does not prove it is uniformly better
+    than v5. Keep v5 as fallback and rerun this evaluation after the full
+    16-problem benchmark finishes.
 - Sanity checks: model `feature_policy` is `pre_ddar_features`; no
   `reason=` or `ddar_status=` weights are present.
 - Purpose: replace the v5/v6-posthoc reranker with a model trained on features
@@ -234,6 +247,20 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: current best partial SFT/hard-negative snapshot while waiting for the full 16-problem run.
 
 ## Next Candidate-Quality Fixes
+
+### `value_model_topk_eval_v1`
+
+- Added `scripts/evaluate_candidate_value_model.py`.
+- The evaluator scores candidate value rows with online-compatible pre-DDAR
+  features by default, filters to valid translated candidates by default, and
+  reports DDAR-budget-oriented metrics grouped by `problem,depth`.
+- Reported metrics include AUC, first positive rank, input-order first positive
+  rank, top-k group hit-rate, top-k positive recall, precision, and missed
+  positive construction types.
+- Added optional `--split train|eval` filtering so held-out rows can be checked
+  separately from all partial rows.
+- Purpose: make reranker selection auditable under the actual top-k DDAR budget
+  instead of relying only on whole-row AUC or training loss.
 
 ### `next_ablation_uses_preddar_v6_v1`
 

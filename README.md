@@ -17,6 +17,8 @@ logs, and remote AlphaGeometry/Qwen checkouts are ignored.
     unlikelihood loss for generator-side hard negatives.
   - `build_candidate_value_data.py` and `train_candidate_value_model.py`:
     candidate value/reranker data and model training.
+  - `evaluate_candidate_value_model.py`: offline value-model diagnostics with
+    DDAR-budget-oriented top-k recall and group hit-rate metrics.
   - `build_fact_context_from_aux_sft.py`: reconstruct Stage2 aux prompts,
     run DDAR, and inject selected facts into `{D}` prompt context.
   - `analyze_qwen_ag_events.py` and `report_qwen_ag_analysis.py`: event log

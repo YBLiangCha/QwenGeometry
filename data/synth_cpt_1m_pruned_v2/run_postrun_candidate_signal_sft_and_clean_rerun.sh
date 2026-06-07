@@ -58,9 +58,9 @@ CLEAN_BEAM_SIZE=${CLEAN_BEAM_SIZE:-64}
 CLEAN_SEARCH_DEPTH=${CLEAN_SEARCH_DEPTH:-4}
 CLEAN_NUM_RETURN_SEQUENCES=${CLEAN_NUM_RETURN_SEQUENCES:-48}
 CLEAN_CANDIDATE_QUALITY_MULTIPLIER=${CLEAN_CANDIDATE_QUALITY_MULTIPLIER:-3}
-CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_candidate_signal_${POSTRUN_TAG}_value_v11_grammar_semantic_v4_scores_dedup_dupneg_depth${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}_nrs${CLEAN_NUM_RETURN_SEQUENCES}_qm${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}_v1}
+CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_candidate_signal_${POSTRUN_TAG}_value_v12_grammar_semantic_v4_scores_dedup_dupneg_depth${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}_nrs${CLEAN_NUM_RETURN_SEQUENCES}_qm${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}_v1}
 CLEAN_OUT_DIR=${CLEAN_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${CLEAN_RERUN_TAG}}
-VALUE_MODEL=${VALUE_MODEL:-outputs/candidate_value_model_v11_logistic_preddar_nodup_semantic_v3_partial6events5summary_v1/candidate_value_model.json}
+VALUE_MODEL=${VALUE_MODEL:-outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1/candidate_value_model.json}
 
 LOG=${LOG:-outputs/${SFT_TAG}.postrun_queue.log}
 mkdir -p "$(dirname "$LOG")" "$DATA_DIR" "$SFT_WORK_DIR"

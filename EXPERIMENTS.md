@@ -27,6 +27,38 @@ changes. Tags are the practical version identifiers for this workspace.
 
 ## Candidate Quality And Training Signals
 
+### `semantic_v3_partial_6events_5summary_v1`
+
+- Analysis:
+  `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_6events_5summary_analysis_v1.json`
+- Report:
+  `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_6events_5summary_report_v1.md`
+- Candidate-signal data:
+  `data/staged_1m_pruned_v2/candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_6events_5summary_v1`
+- Current status at this snapshot: 6 event files, 5 completed summary rows,
+  1 solved problem, and 1 new solved problem vs baseline:
+  `translated_imo_2004_p1`.
+- Aggregate candidate stats: 11513 candidates, 9579 valid, 1934 invalid,
+  9069 filtered, 5663 `duplicate_canonical`, 220 candidate DDAR completions,
+  and 38 candidate DDAR errors.
+- Training signal extraction:
+  - positive SFT rows: 184 total, 166 train, 18 eval; 183
+    `ddar_progress_positive`, 1 `candidate_solved`.
+  - hard-negative rows: 937 total, 844 train, 93 eval; 756
+    `point_too_close`, 181 `point_too_far`.
+- Current duplicate-filter rows in this running process still lack
+  `prompt/target`, so they cannot yet become generator hard-negative SFT rows.
+  That will only happen in a clean rerun using
+  `duplicate_canonical_negative_signal_v1` or later source.
+- Next safe SFT candidate after the active bench exits:
+  `candidate_signal_sft_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial6_v1`,
+  initialized from
+  `outputs/stage2_fact_context_after_stage2_lora_qwen2_5_7b_factctx_promptaug_top8_stage2max2000_v1`
+  and mixed with
+  `data/staged_1m_pruned_v2/factctx_promptaug_top8_stage2max2000_v1/fact_context_mixed_train.jsonl`.
+  Do not start this GPU SFT while the current benchmark process is still using
+  the GPU.
+
 ### `duplicate_canonical_negative_signal_v1`
 
 - Duplicate-canonical filtered candidates now carry `prompt` and `target` in

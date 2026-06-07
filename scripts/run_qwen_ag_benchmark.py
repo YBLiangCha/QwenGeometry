@@ -588,6 +588,9 @@ def solve_one(
             args.candidate_prompt_sampling,
         )
         seen_raw = {raw for raw, _ in candidates}
+        seen_generation_keys = {
+            qs.candidate_generation_dedup_key(raw) for raw, _ in candidates
+        }
         if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
           needed = args.num_return_sequences - len(candidates)
           for raw in qs.template_backfill_candidates(
@@ -595,9 +598,11 @@ def solve_one(
               needed * 4,
               seen_candidate_keys if args.candidate_canonical_dedup else None,
           ):
-            if raw not in seen_raw:
+            generation_key = qs.candidate_generation_dedup_key(raw)
+            if raw not in seen_raw and generation_key not in seen_generation_keys:
               candidates.append((raw, 0.0))
               seen_raw.add(raw)
+              seen_generation_keys.add(generation_key)
             if len(candidates) >= args.num_return_sequences:
               break
         translated_candidates = []
@@ -890,6 +895,9 @@ def solve_one(
           args.candidate_prompt_sampling,
       )
       seen_raw = {raw for raw, _ in candidates}
+      seen_generation_keys = {
+          qs.candidate_generation_dedup_key(raw) for raw, _ in candidates
+      }
       if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
         needed = args.num_return_sequences - len(candidates)
         for raw in qs.template_backfill_candidates(
@@ -897,9 +905,11 @@ def solve_one(
             needed * 4,
             seen_candidate_keys if args.candidate_canonical_dedup else None,
         ):
-          if raw not in seen_raw:
+          generation_key = qs.candidate_generation_dedup_key(raw)
+          if raw not in seen_raw and generation_key not in seen_generation_keys:
             candidates.append((raw, 0.0))
             seen_raw.add(raw)
+            seen_generation_keys.add(generation_key)
           if len(candidates) >= args.num_return_sequences:
             break
       parallel_tasks = []

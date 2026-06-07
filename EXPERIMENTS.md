@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `generation_canonical_dedup_v1`
+- Current GitHub source head: `template_backfill_generation_dedup_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -149,6 +149,17 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: produce an immediately usable typed signal snapshot for construction-family balancing and value/reranker auditing.
 
 ## Next Candidate-Quality Fixes
+
+### `template_backfill_generation_dedup_v1`
+
+- Initial template backfill now compares candidate canonical generation keys
+  against the current generate-call candidate set, not only raw text.
+- Applies in both `scripts/run_qwen_ag_benchmark.py` and the standalone
+  `scripts/qwen_ag_search.py` search entry.
+- Purpose: avoid adding template candidates that are raw-text different but
+  canonical-equivalent to LM-generated candidates in the same decode step. This
+  reduces needless translation/logging and later `duplicate_canonical` filters
+  in the next clean run.
 
 ### `generation_canonical_dedup_v1`
 

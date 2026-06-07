@@ -84,6 +84,12 @@ _VERIFIER_PRIOR_TYPE_BONUS = {
     'on_aline': 0.8,
     'on_circle+on_line': 0.7,
     'on_circum+on_line': 0.7,
+    'on_circum+on_tline': 0.6,
+    'on_bline+on_circle': 0.6,
+    'on_bline+on_bline': 0.5,
+    'eqdistance+on_circle': 0.5,
+    'eqdistance+on_tline': 0.5,
+    'on_dia+on_tline': 0.5,
 }
 _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG = (
     set(_CONSTRUCTIVE_ARG_ARITY) - {'eqangle3'}
@@ -722,7 +728,7 @@ def template_backfill_candidates(
   pts = sorted(point_names, key=lambda point: (point not in preferred_points, point))
   if not new_point or len(pts) < 3:
     return []
-  buckets: list[list[str]] = [[] for _ in range(22)]
+  buckets: list[list[str]] = [[] for _ in range(30)]
   seen_canonical: set[str] = set()
 
   def prefer_key(item: tuple[str, ...]) -> tuple[int, tuple[str, ...]]:
@@ -825,6 +831,8 @@ def template_backfill_candidates(
   for a, b, c, d, e, f in spread(disjoint_triples, 12):
     add(18, f'{new_point} : O {new_point} {a} {b} {c} 00 O {new_point} {d} {e} {f} 01 ;')
     add(19, f'{new_point} : T {new_point} {a} {b} {c} 00 T {new_point} {d} {e} {f} 01 ;')
+    add(22, f'{new_point} : O {new_point} {a} {b} {c} 00 T {new_point} {d} {e} {f} 01 ;')
+    add(23, f'{new_point} : D {new_point} {a} {b} {c} 00 T {new_point} {d} {e} {f} 01 ;')
   selected_quintuples = []
   seen_quintuples = set()
   for a, b in selected_pairs:
@@ -844,6 +852,11 @@ def template_backfill_candidates(
     add(13, f'{new_point} = on_aline {new_point} {a} {b} {c} {d} {e};')
     add(14, f'{new_point} = on_aline2 {new_point} {a} {b} {c} {d} {e};')
     add(15, f'{new_point} = eqangle3 {a} {b} {c} {d} {e};')
+    add(24, f'{new_point} : D {new_point} {a} {new_point} {b} 00 D {new_point} {c} {d} {c} 01 ;')
+    add(25, f'{new_point} : D {new_point} {a} {new_point} {b} 00 D {new_point} {c} {new_point} {d} 01 ;')
+    add(26, f'{new_point} : D {new_point} {a} {b} {c} 00 D {new_point} {d} {e} {d} 01 ;')
+    add(27, f'{new_point} : T {new_point} {a} {new_point} {b} 00 T {new_point} {c} {d} {e} 01 ;')
+    add(28, f'{new_point} : D {new_point} {a} {new_point} {b} 00 T {new_point} {c} {d} {e} 01 ;')
 
   candidates: list[str] = []
   positions = [0 for _ in buckets]

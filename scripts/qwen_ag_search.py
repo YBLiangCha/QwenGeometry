@@ -65,9 +65,11 @@ _HIGH_VALUE_CONSTRUCTION_TYPES = {
     'angle_bisector',
     'angle_mirror',
     'eqangle3',
+    'on_bline',
     'on_aline',
     'on_aline2',
     'on_circum',
+    'on_dia',
 }
 _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG = (
     set(_CONSTRUCTIVE_ARG_ARITY) - {'eqangle3'}
@@ -706,7 +708,7 @@ def template_backfill_candidates(
   pts = sorted(point_names, key=lambda point: (point not in preferred_points, point))
   if not new_point or len(pts) < 3:
     return []
-  buckets: list[list[str]] = [[] for _ in range(12)]
+  buckets: list[list[str]] = [[] for _ in range(16)]
   seen_canonical: set[str] = set()
 
   def prefer_key(item: tuple[str, ...]) -> tuple[int, tuple[str, ...]]:
@@ -773,9 +775,14 @@ def template_backfill_candidates(
     add(5, f'{new_point} : D {new_point} {a} {b} {c} 00 ;')
   for a, b in selected_pairs[:12]:
     add(6, f'{new_point} = on_circle {new_point} {a} {b};')
+    add(7, f'{new_point} = on_bline {new_point} {a} {b};')
+    add(8, f'{new_point} = on_line {new_point} {a} {b}, on_bline {new_point} {a} {b};')
+    add(9, f'{new_point} = on_dia {new_point} {a} {b};')
   for a, b, c in selected_triples[:12]:
-    add(7, f'{new_point} = angle_bisector {new_point} {a} {b} {c};')
-    add(8, f'{new_point} = angle_mirror {new_point} {a} {b} {c};')
+    add(10, f'{new_point} = angle_bisector {new_point} {a} {b} {c};')
+    add(11, f'{new_point} = angle_mirror {new_point} {a} {b} {c};')
+  for a, b, c, d in spread(disjoint_pair_sets, 12):
+    add(12, f'{new_point} = on_dia {new_point} {a} {b}, on_line {new_point} {c} {d};')
   selected_quintuples = []
   seen_quintuples = set()
   for a, b in selected_pairs:
@@ -792,9 +799,9 @@ def template_backfill_candidates(
     if len(selected_quintuples) >= 24:
       break
   for a, b, c, d, e in selected_quintuples[:12]:
-    add(9, f'{new_point} = on_aline {new_point} {a} {b} {c} {d} {e};')
-    add(10, f'{new_point} = on_aline2 {new_point} {a} {b} {c} {d} {e};')
-    add(11, f'{new_point} = eqangle3 {a} {b} {c} {d} {e};')
+    add(13, f'{new_point} = on_aline {new_point} {a} {b} {c} {d} {e};')
+    add(14, f'{new_point} = on_aline2 {new_point} {a} {b} {c} {d} {e};')
+    add(15, f'{new_point} = eqangle3 {a} {b} {c} {d} {e};')
 
   candidates: list[str] = []
   positions = [0 for _ in buckets]

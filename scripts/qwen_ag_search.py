@@ -775,14 +775,14 @@ def template_backfill_candidates(
     add(5, f'{new_point} : D {new_point} {a} {b} {c} 00 ;')
   for a, b in selected_pairs[:12]:
     add(6, f'{new_point} = on_circle {new_point} {a} {b};')
-    add(7, f'{new_point} = on_bline {new_point} {a} {b};')
-    add(8, f'{new_point} = on_line {new_point} {a} {b}, on_bline {new_point} {a} {b};')
-    add(9, f'{new_point} = on_dia {new_point} {a} {b};')
+    add(7, f'{new_point} : D {new_point} {a} {new_point} {b} 00 ;')
+    add(8, f'{new_point} : D {new_point} {a} {new_point} {b} 00 C {new_point} {a} {b} 01 ;')
+    add(9, f'{new_point} : T {new_point} {a} {new_point} {b} 00 ;')
   for a, b, c in selected_triples[:12]:
     add(10, f'{new_point} = angle_bisector {new_point} {a} {b} {c};')
     add(11, f'{new_point} = angle_mirror {new_point} {a} {b} {c};')
   for a, b, c, d in spread(disjoint_pair_sets, 12):
-    add(12, f'{new_point} = on_dia {new_point} {a} {b}, on_line {new_point} {c} {d};')
+    add(12, f'{new_point} : T {new_point} {a} {new_point} {b} 00 C {new_point} {c} {d} 01 ;')
   selected_quintuples = []
   seen_quintuples = set()
   for a, b in selected_pairs:

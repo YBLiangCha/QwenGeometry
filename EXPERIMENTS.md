@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `semantic_v3_partial_7events_snapshot_v1`
+- Current GitHub source head: `postrun_candidate_signal_queue_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -26,6 +26,20 @@ changes. Tags are the practical version identifiers for this workspace.
   source after this run completes or immediately before launching the next tag.
 
 ## Candidate Quality And Training Signals
+
+### `postrun_candidate_signal_queue_v1`
+
+- Added
+  `data/synth_cpt_1m_pruned_v2/run_postrun_candidate_signal_sft_and_clean_rerun.sh`.
+- The script waits for the active semantic-v3 benchmark process to exit before
+  using the GPU. It then builds postrun analysis, extracts positive
+  candidate-signal rows and hard negatives, mixes them with the prompt-aug
+  fact-context rows, and trains a candidate-signal LoRA initialized from
+  `factctx_promptaug_top8_stage2max2000_v1`.
+- It can optionally launch the next clean 16-problem rerun with the trained
+  adapter and the v11 value model by setting `RUN_CLEAN_RERUN=1`.
+- Purpose: keep progress moving without overwriting active benchmark scripts or
+  stealing GPU memory from the currently running process.
 
 ### `semantic_v3_partial_7events_6summary_v1`
 

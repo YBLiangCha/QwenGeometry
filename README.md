@@ -51,7 +51,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `semantic_v3_partial_7events_snapshot_v1`
+  `postrun_candidate_signal_queue_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -84,6 +84,9 @@ load TkAgg.
 - Value/reranker training and evaluation exclude `duplicate_canonical` rows by
   default because online reranking happens after canonical dedup. Those rows
   remain useful for generator hard-negative SFT.
+- `run_postrun_candidate_signal_sft_and_clean_rerun.sh` can safely wait for
+  the active benchmark to exit, then build final candidate-signal data, train a
+  candidate-signal adapter, and optionally launch the next clean rerun.
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

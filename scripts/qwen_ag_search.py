@@ -507,12 +507,11 @@ def _parse_constructive_prefix(
           return 'invalid'
         if name == 'eqangle3' and tok == point:
           return 'invalid'
-        if (
-            name in _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG
-            and not args
-            and tok != point
-        ):
-          return 'invalid'
+        if name in _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG:
+          if not args and tok != point:
+            return 'invalid'
+          if args and tok == point:
+            return 'invalid'
       args.append(tok)
       if len(args) > max_arity:
         return 'invalid'

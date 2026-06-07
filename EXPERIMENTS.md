@@ -78,6 +78,8 @@ changes. Tags are the practical version identifiers for this workspace.
 - Started: 2026-06-07 21:20 +0800.
 - Purpose: rerun the 16 unsolved problems with the same prompt-aug fact-context adapter and search budget, plus `eqangle3_arity_fix_v1`, `unknown_point_hardneg_v1`, and `semantic_point_mask_v1`.
 - Queue PIDs at launch: ablation `754460`, candidate signal data `754461`, candidate signal SFT `754462`.
+- Partial check at 2026-06-07 21:31 +0800: 2 event files, 1 completed problem, 0 solved, 270 candidates, 203 valid, 67 invalid, 29 duplicate-canonical filters, 16 candidate DDAR done, 16 candidate DDAR errors, 10 candidate SFT signals, 18 hard-negative signals.
+- Early readout: compared with the stopped pre-semantic run at a similar early stage, semantic masking sharply reduced unknown-point/duplicate noise; `translated_imo_2000_p6` remains DDAR-timeout blocked.
 
 ## Next Candidate-Quality Fixes
 

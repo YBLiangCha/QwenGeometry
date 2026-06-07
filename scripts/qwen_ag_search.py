@@ -677,6 +677,15 @@ def dsl_to_constructive_candidate(text: str) -> str:
   return point + ' = ' + ', '.join(constructions)
 
 
+def candidate_generation_dedup_key(text: str) -> str:
+  """Cheap canonical key for de-duplicating candidates before AG validation."""
+  text = normalize_generated_candidate(text)
+  try:
+    return canonical_aux_key(dsl_to_constructive_candidate(text))
+  except Exception:  # pylint: disable=broad-except
+    return text
+
+
 def template_backfill_candidates(
     point_names: set[str] | None,
     max_candidates: int,
@@ -1501,9 +1510,10 @@ class QwenGenerator:
           continue
         if not candidate_passes_point_mask(text, forbidden_point_names):
           continue
-        if text and text not in seen:
+        dedup_key = candidate_generation_dedup_key(text)
+        if text and dedup_key not in seen:
           candidates.append((text, 0.0))
-          seen.add(text)
+          seen.add(dedup_key)
         if len(candidates) >= requested_sequences:
           return candidates
     return candidates

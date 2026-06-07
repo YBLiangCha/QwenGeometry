@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `candidate_signal_row_type_inference_v1`
+- Current GitHub source head: `generation_canonical_dedup_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -149,6 +149,18 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: produce an immediately usable typed signal snapshot for construction-family balancing and value/reranker auditing.
 
 ## Next Candidate-Quality Fixes
+
+### `generation_canonical_dedup_v1`
+
+- Adds `candidate_generation_dedup_key` in `scripts/qwen_ag_search.py`.
+- Qwen generation now de-duplicates candidates within a single generate call by
+  lightweight canonical auxiliary key, not just raw generated text.
+- Examples treated as the same candidate:
+  - `n : C e f n 00 D n e n f 01 ;`
+  - `n = on_line n e f, on_bline n f e;`
+- Purpose: reduce same-decode duplicates before candidates reach AG graph
+  validation, canonical filtering, or template backfill. This is a future-run
+  candidate-quality fix and does not affect the already-running v3 process.
 
 ### `candidate_signal_row_type_inference_v1`
 

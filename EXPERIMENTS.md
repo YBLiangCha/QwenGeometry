@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `goal_aware_template_backfill_queue_v1`
+- Current GitHub source head: `wide_clean_rerun_queue_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -91,6 +91,18 @@ changes. Tags are the practical version identifiers for this workspace.
   choices are relevant. Goal-aware ordering should make template backfill spend
   more of its budget around the target relation instead of mostly early
   alphabetical point combinations.
+
+### `wide_clean_rerun_queue_v1`
+
+- Makes clean-rerun search strength configurable through
+  `CLEAN_BEAM_SIZE`, `CLEAN_SEARCH_DEPTH`, `CLEAN_NUM_RETURN_SEQUENCES`, and
+  `CLEAN_CANDIDATE_QUALITY_MULTIPLIER`.
+- Default clean rerun budget is widened to `num_return_sequences=48`,
+  `candidate_quality_multiplier=3`, and `candidate_depth_eval_limit=32`.
+- Motivation: after candidate-signal SFT and goal-aware high-value templates,
+  the clean rerun should give the generator and reranker enough candidates to
+  surface useful auxiliary constructions. This is more expensive than the
+  earlier depth-24 queue, but better aligned with chasing an AG1-style score.
 
 ### `semantic_v3_partial_7events_6summary_v1`
 

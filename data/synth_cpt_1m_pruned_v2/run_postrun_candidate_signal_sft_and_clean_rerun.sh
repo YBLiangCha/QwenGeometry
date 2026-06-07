@@ -50,9 +50,13 @@ FORCE_TRAIN=${FORCE_TRAIN:-0}
 
 RUN_CLEAN_RERUN=${RUN_CLEAN_RERUN:-0}
 CLEAN_CANDIDATE_EVAL_LIMIT=${CLEAN_CANDIDATE_EVAL_LIMIT:-0}
-CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT=${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT:-24}
+CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT=${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT:-32}
 CLEAN_CANDIDATE_DDAR_WORKERS=${CLEAN_CANDIDATE_DDAR_WORKERS:-8}
-CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_candidate_signal_${POSTRUN_TAG}_value_v11_grammar_semantic_v4_scores_dedup_dupneg_depth${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}_v1}
+CLEAN_BEAM_SIZE=${CLEAN_BEAM_SIZE:-64}
+CLEAN_SEARCH_DEPTH=${CLEAN_SEARCH_DEPTH:-4}
+CLEAN_NUM_RETURN_SEQUENCES=${CLEAN_NUM_RETURN_SEQUENCES:-48}
+CLEAN_CANDIDATE_QUALITY_MULTIPLIER=${CLEAN_CANDIDATE_QUALITY_MULTIPLIER:-3}
+CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_candidate_signal_${POSTRUN_TAG}_value_v11_grammar_semantic_v4_scores_dedup_dupneg_depth${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}_nrs${CLEAN_NUM_RETURN_SEQUENCES}_qm${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}_v1}
 CLEAN_OUT_DIR=${CLEAN_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${CLEAN_RERUN_TAG}}
 VALUE_MODEL=${VALUE_MODEL:-outputs/candidate_value_model_v11_logistic_preddar_nodup_semantic_v3_partial6events5summary_v1/candidate_value_model.json}
 
@@ -235,7 +239,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     exit 1
   fi
   log "starting clean rerun: $CLEAN_RERUN_TAG"
-  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}"
+  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}"
   xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchmark.py" \
     --script_dir "$SCRIPT_DIR" \
     --ag_repo repos/alphageometry \
@@ -256,13 +260,13 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --candidate_wall_timeout 90 \
     --candidate_eval_limit "$CLEAN_CANDIDATE_EVAL_LIMIT" \
     --candidate_depth_eval_limit "$CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT" \
-    --beam_size 64 \
-    --search_depth 4 \
-    --num_return_sequences 32 \
+    --beam_size "$CLEAN_BEAM_SIZE" \
+    --search_depth "$CLEAN_SEARCH_DEPTH" \
+    --num_return_sequences "$CLEAN_NUM_RETURN_SEQUENCES" \
     --max_new_tokens 64 \
     --temperature 0.8 \
     --top_p 0.95 \
-    --candidate_quality_multiplier 2 \
+    --candidate_quality_multiplier "$CLEAN_CANDIDATE_QUALITY_MULTIPLIER" \
     --candidate_dsl_filter \
     --candidate_dsl_token_mask \
     --candidate_point_repair \

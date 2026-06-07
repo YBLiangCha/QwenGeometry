@@ -51,7 +51,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `goal_aware_template_backfill_queue_v1`
+  `wide_clean_rerun_queue_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -100,6 +100,10 @@ load TkAgg.
 - Template point combinations are goal-aware: fallback pairs/triples are
   ordered to prefer points that appear in the current target predicate before
   the spread sampler selects diverse templates.
+- The queued clean rerun defaults to a wider search budget:
+  `CLEAN_NUM_RETURN_SEQUENCES=48`, `CLEAN_CANDIDATE_QUALITY_MULTIPLIER=3`, and
+  `CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT=32`, while keeping those knobs configurable
+  from the environment.
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

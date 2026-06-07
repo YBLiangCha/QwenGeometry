@@ -6,15 +6,16 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current source head: `value_rerank_event_scores_v1`
+- Current source head: `template_backfill_seen_canonical_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
   `semantic_point_mask_v3`; it does not include later `semantic_point_mask_v4`
   degenerate-construction filtering or candidate rerank-score event logging,
-  because the process was already running when those commits were made.
+  or `template_backfill_seen_canonical_v1`, because the process was already
+  running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `value_rerank_event_scores_v1`, optionally with a new bench tag such as
+  `template_backfill_seen_canonical_v1`, optionally with a new bench tag such as
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_v1`.
 
 ## Completed Bench
@@ -111,6 +112,19 @@ changes. Tags are the practical version identifiers for this workspace.
 - Live check at 2026-06-07 22:08 +0800: still running on `translated_imo_2004_p1`, summary rows 1/16. The second problem had reached depth 3 with 1789 candidates, 1489 filtered candidates, 862 canonical duplicates, 627 depth-rank prunes, 49 DDAR runs, 42 verifier-backed candidate SFT signals, and 100 hard-negative signals.
 
 ## Next Candidate-Quality Fixes
+
+### `template_backfill_seen_canonical_v1`
+
+- Adds a lightweight DSL-to-constructive translation helper for generated
+  candidate text, so template candidates can be canonicalized before AG graph
+  validation.
+- Passes the problem-level `seen_candidate_keys` set into template backfill.
+  Template fallback now avoids globally seen canonical auxiliary clauses at
+  generation time instead of logging them and filtering them later.
+- Purpose: reduce cross-node/cross-depth duplicate template candidates and cut
+  translation/log overhead. This does not affect the already-running
+  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
+  process; it applies to the next clean rerun.
 
 ### `eqangle3_arity_fix_v1`
 

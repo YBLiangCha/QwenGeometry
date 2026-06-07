@@ -641,8 +641,46 @@ def candidate_dsl_prefix_status(
   return _parse_constructive_prefix(point, body, has_semicolon, known_points)
 
 
+def dsl_to_constructive_candidate(text: str) -> str:
+  """Translate DSL candidate text to a constructive clause without AG validation."""
+  text = normalize_generated_candidate(text)
+  clause = text.rstrip(';').strip()
+  if ' = ' in clause:
+    return clause
+  if ' : ' not in text or not text.endswith(';'):
+    raise ValueError('candidate is not a complete constrained DSL clause')
+  point, prem_str = text.split(' : ', 1)
+  point = point.strip()
+  if not _POINT_RE.match(point):
+    raise ValueError(f'invalid point name {point}')
+  prem_toks = prem_str.split()[:-1]
+  prems: list[list[str]] = [[]]
+  for i, tok in enumerate(prem_toks):
+    if tok.isdigit():
+      if i < len(prem_toks) - 1:
+        prems.append([])
+    else:
+      prems[-1].append(tok)
+  if len(prems) > 2:
+    raise ValueError('there cannot be more than two predicates')
+  constructions = []
+  for prem in prems:
+    if not prem:
+      continue
+    name, args = prem[0], prem[1:]
+    construction_name, construction_args = translate_constrained_to_constructive(
+        point, name, args
+    )
+    constructions.append(construction_name + ' ' + ' '.join(construction_args))
+  if not constructions:
+    raise ValueError('empty constrained DSL clause')
+  return point + ' = ' + ', '.join(constructions)
+
+
 def template_backfill_candidates(
-    point_names: set[str] | None, max_candidates: int
+    point_names: set[str] | None,
+    max_candidates: int,
+    excluded_canonical_keys: set[str] | None = None,
 ) -> list[str]:
   """Generate type-diverse DSL candidates from simple construction templates."""
   if not point_names or max_candidates <= 0:
@@ -661,6 +699,8 @@ def template_backfill_candidates(
       key = canonical_aux_key(translated)
     except Exception:  # pylint: disable=broad-except
       pass
+    if excluded_canonical_keys and key in excluded_canonical_keys:
+      return
     if key not in seen_canonical and text not in buckets[bucket]:
       seen_canonical.add(key)
       buckets[bucket].append(text)
@@ -1544,7 +1584,11 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
         if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
           seen_raw = {raw for raw, _ in candidates}
           needed = args.num_return_sequences - len(candidates)
-          for raw in template_backfill_candidates(forbidden_points, needed * 4):
+          for raw in template_backfill_candidates(
+              forbidden_points,
+              needed * 4,
+              seen_candidate_keys if args.candidate_canonical_dedup else None,
+          ):
             if raw not in seen_raw:
               candidates.append((raw, 0.0))
               seen_raw.add(raw)
@@ -1699,7 +1743,11 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
       if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
         seen_raw = {raw for raw, _ in candidates}
         needed = args.num_return_sequences - len(candidates)
-        for raw in template_backfill_candidates(forbidden_points, needed * 4):
+        for raw in template_backfill_candidates(
+            forbidden_points,
+            needed * 4,
+            seen_candidate_keys if args.candidate_canonical_dedup else None,
+        ):
           if raw not in seen_raw:
             candidates.append((raw, 0.0))
             seen_raw.add(raw)

@@ -294,7 +294,9 @@ def post_canonical_template_backfill(
   attempted = 0
   needed = target_count - len(translated_candidates)
   template_budget = max(target_count * 32, needed * 16, 128)
-  for raw in qs.template_backfill_candidates(forbidden_points, template_budget):
+  for raw in qs.template_backfill_candidates(
+      forbidden_points, template_budget, seen_candidate_keys
+  ):
     attempted += 1
     if raw in seen_raw:
       continue
@@ -566,7 +568,11 @@ def solve_one(
         seen_raw = {raw for raw, _ in candidates}
         if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
           needed = args.num_return_sequences - len(candidates)
-          for raw in qs.template_backfill_candidates(forbidden_points, needed * 4):
+          for raw in qs.template_backfill_candidates(
+              forbidden_points,
+              needed * 4,
+              seen_candidate_keys if args.candidate_canonical_dedup else None,
+          ):
             if raw not in seen_raw:
               candidates.append((raw, 0.0))
               seen_raw.add(raw)
@@ -858,7 +864,11 @@ def solve_one(
       seen_raw = {raw for raw, _ in candidates}
       if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
         needed = args.num_return_sequences - len(candidates)
-        for raw in qs.template_backfill_candidates(forbidden_points, needed * 4):
+        for raw in qs.template_backfill_candidates(
+            forbidden_points,
+            needed * 4,
+            seen_candidate_keys if args.candidate_canonical_dedup else None,
+        ):
           if raw not in seen_raw:
             candidates.append((raw, 0.0))
             seen_raw.add(raw)

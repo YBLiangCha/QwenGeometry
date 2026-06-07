@@ -79,6 +79,18 @@ def event_candidate_source(event: dict[str, Any]) -> str:
   )
 
 
+def raw_candidate_construction_type(raw: str | None) -> str:
+  raw = str(raw or '').strip()
+  if not raw:
+    return 'error'
+  try:
+    import qwen_ag_search as qs  # pylint: disable=import-outside-toplevel
+
+    return qs.construction_type_key(qs.dsl_to_constructive_candidate(raw))
+  except Exception:  # pylint: disable=broad-except
+    return 'error'
+
+
 def candidate_lookup_keys(
     depth: Any, raw: str | None, translation: str | None
 ) -> list[tuple[int, str]]:
@@ -96,19 +108,24 @@ def candidate_record(
     event: dict[str, Any], lookup: dict[tuple[int, str], dict[str, str]]
 ) -> dict[str, str]:
   translation = event.get('translation') or ''
+  event_ctype = event.get('candidate_construction_type')
+  event_source = event_candidate_source(event)
   if translation and classify_error(translation) == 'not_error':
     return {
         'translation': translation,
-        'construction_type': construction_type(translation),
-        'source': event_candidate_source(event),
+        'construction_type': event_ctype or construction_type(translation),
+        'source': event_source,
     }
-  for key in candidate_lookup_keys(event.get('depth'), event.get('raw'), translation):
+  raw = event.get('raw') or event.get('target')
+  for key in candidate_lookup_keys(event.get('depth'), raw, translation):
     if key in lookup:
       return lookup[key]
   return {
       'translation': translation,
-      'construction_type': construction_type(translation),
-      'source': event_candidate_source(event),
+      'construction_type': (
+          event_ctype or raw_candidate_construction_type(raw) or construction_type(translation)
+      ),
+      'source': event_source,
   }
 
 

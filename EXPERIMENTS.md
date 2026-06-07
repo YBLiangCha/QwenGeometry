@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `candidate_signal_partial_snapshot_mode_v1`
+- Current GitHub source head: `candidate_signal_type_fields_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -138,6 +138,21 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: let us mine verifier-backed aux-construction signal from long-running partial benches instead of waiting for all 16 problems before any data can be inspected.
 
 ## Next Candidate-Quality Fixes
+
+### `candidate_signal_type_fields_v1`
+
+- Candidate SFT signal events now include `candidate_source`,
+  `candidate_construction_type`, and `candidate_rerank_score`.
+- Candidate hard-negative signal events now include `candidate_source` and
+  `candidate_construction_type`.
+- Candidate signal JSONL builders carry these fields into positive and
+  hard-negative rows.
+- Analysis now resolves construction type from `target` for older
+  hard-negative events, so PointTooClose/PointTooFar logs are no longer forced
+  into a generic `error` construction bucket when the raw DSL target is present.
+- Purpose: make positive and negative auxiliary-construction signals usable for
+  construction-family balancing, reranker/value-model audits, and targeted
+  hard-negative training.
 
 ### `candidate_signal_partial_snapshot_mode_v1`
 

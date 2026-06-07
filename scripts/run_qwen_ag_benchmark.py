@@ -190,6 +190,9 @@ def maybe_log_candidate_sft_signal(
     root: dict[str, Any],
     result: dict[str, Any],
     args: argparse.Namespace,
+    candidate_source: str = 'lm',
+    candidate_construction_type: str | None = None,
+    candidate_rerank_score: float | None = None,
 ) -> None:
   if not args.log_candidate_sft_signals or not prompt:
     return
@@ -232,7 +235,21 @@ def maybe_log_candidate_sft_signal(
       candidate_elapsed_sec=elapsed,
       candidate_levels=result.get('levels'),
       candidate_ddar_status=result.get('status'),
+      candidate_source=candidate_source,
+      candidate_construction_type=(
+          candidate_construction_type or qs.construction_type_key(translation)
+      ),
+      candidate_rerank_score=candidate_rerank_score,
   )
+
+
+def candidate_construction_type_for_event(qs: Any, raw: str, translation: str) -> str:
+  if translation and not translation.startswith('ERROR:'):
+    return qs.construction_type_key(translation)
+  try:
+    return qs.construction_type_key(qs.dsl_to_constructive_candidate(raw))
+  except Exception:  # pylint: disable=broad-except
+    return 'error'
 
 
 def maybe_log_candidate_hard_negative_signal(
@@ -244,6 +261,7 @@ def maybe_log_candidate_hard_negative_signal(
     translation: str,
     prompt: str | None,
     args: argparse.Namespace,
+    source: str = 'lm',
 ) -> None:
   if not args.log_candidate_hard_negative_signals or not prompt:
     return
@@ -264,6 +282,10 @@ def maybe_log_candidate_hard_negative_signal(
       target=raw,
       translation=translation,
       reason=reason,
+      candidate_source=source,
+      candidate_construction_type=candidate_construction_type_for_event(
+          qs, raw, translation
+      ),
   )
 
 
@@ -737,6 +759,9 @@ def solve_one(
             root,
             result,
             args,
+            candidate_source=record.get('source', 'lm'),
+            candidate_construction_type=qs.construction_type_key(translation),
+            candidate_rerank_score=record.get('_candidate_rerank_score'),
         )
         if result['solved']:
           qs.event(events_file, kind='solved', depth=depth, aux=translation)
@@ -792,6 +817,9 @@ def solve_one(
             root,
             result,
             args,
+            candidate_source=item.get('candidate_source') or 'lm',
+            candidate_construction_type=item.get('candidate_construction_type'),
+            candidate_rerank_score=item.get('candidate_rerank_score'),
         )
         if result['solved']:
           qs.event(
@@ -1005,6 +1033,9 @@ def solve_one(
             root,
             result,
             args,
+            candidate_source=record.get('source', 'lm'),
+            candidate_construction_type=qs.construction_type_key(translation),
+            candidate_rerank_score=record.get('_candidate_rerank_score'),
         )
         if result['solved']:
           qs.event(events_file, kind='solved', depth=depth, aux=translation)
@@ -1060,6 +1091,9 @@ def solve_one(
             root,
             result,
             args,
+            candidate_source=item.get('candidate_source') or 'lm',
+            candidate_construction_type=item.get('candidate_construction_type'),
+            candidate_rerank_score=item.get('candidate_rerank_score'),
         )
         if result['solved']:
           qs.event(

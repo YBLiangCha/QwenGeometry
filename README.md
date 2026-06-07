@@ -49,7 +49,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `candidate_signal_partial_snapshot_mode_v1`
+  `candidate_signal_type_fields_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:

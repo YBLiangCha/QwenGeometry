@@ -65,6 +65,8 @@ def row_from_event(event: dict[str, Any], path: Path, line_no: int) -> dict[str,
       'prompt': prompt,
       'target': target,
       'candidate_translation': event.get('translation'),
+      'candidate_construction_type': event.get('candidate_construction_type'),
+      'candidate_source': event.get('candidate_source') or event.get('source') or 'lm',
       'verdict': event.get('reason'),
       'depth': event.get('depth'),
   }

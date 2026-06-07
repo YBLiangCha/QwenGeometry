@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `postrun_candidate_signal_queue_v1`
+- Current GitHub source head: `postrun_clean_depth24_queue_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -40,6 +40,20 @@ changes. Tags are the practical version identifiers for this workspace.
   adapter and the v11 value model by setting `RUN_CLEAN_RERUN=1`.
 - Purpose: keep progress moving without overwriting active benchmark scripts or
   stealing GPU memory from the currently running process.
+
+### `postrun_clean_depth24_queue_v1`
+
+- Updates
+  `data/synth_cpt_1m_pruned_v2/run_postrun_candidate_signal_sft_and_clean_rerun.sh`
+  so the queued clean rerun exposes `CLEAN_CANDIDATE_EVAL_LIMIT`,
+  `CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT`, and `CLEAN_CANDIDATE_DDAR_WORKERS`.
+- Default clean rerun depth budget is raised from 16 to 24 and the default tag
+  now includes `depth24`. This matches
+  `run_unsolved_high_budget_qwen.sh` more closely and gives the reranker a wider
+  DDAR-verified candidate window when chasing the AG1-style baseline.
+- The active semantic-v3 benchmark is still untouched; this only changes the
+  postrun queue that waits for it to finish before training and launching the
+  clean rerun.
 
 ### `semantic_v3_partial_7events_6summary_v1`
 

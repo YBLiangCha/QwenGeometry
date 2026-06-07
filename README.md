@@ -51,7 +51,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `postrun_candidate_signal_queue_v1`
+  `postrun_clean_depth24_queue_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -87,6 +87,9 @@ load TkAgg.
 - `run_postrun_candidate_signal_sft_and_clean_rerun.sh` can safely wait for
   the active benchmark to exit, then build final candidate-signal data, train a
   candidate-signal adapter, and optionally launch the next clean rerun.
+- The postrun clean rerun now defaults to `CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT=24`
+  to match the high-budget unsolved-run budget more closely; set it lower only
+  for fast ablations.
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

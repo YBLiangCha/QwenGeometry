@@ -48,7 +48,10 @@ TRAIN_SFT=${TRAIN_SFT:-1}
 FORCE_TRAIN=${FORCE_TRAIN:-0}
 
 RUN_CLEAN_RERUN=${RUN_CLEAN_RERUN:-0}
-CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_candidate_signal_${POSTRUN_TAG}_value_v11_grammar_semantic_v4_scores_dedup_dupneg_v1}
+CLEAN_CANDIDATE_EVAL_LIMIT=${CLEAN_CANDIDATE_EVAL_LIMIT:-0}
+CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT=${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT:-24}
+CLEAN_CANDIDATE_DDAR_WORKERS=${CLEAN_CANDIDATE_DDAR_WORKERS:-8}
+CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_candidate_signal_${POSTRUN_TAG}_value_v11_grammar_semantic_v4_scores_dedup_dupneg_depth${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}_v1}
 CLEAN_OUT_DIR=${CLEAN_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${CLEAN_RERUN_TAG}}
 VALUE_MODEL=${VALUE_MODEL:-outputs/candidate_value_model_v11_logistic_preddar_nodup_semantic_v3_partial6events5summary_v1/candidate_value_model.json}
 
@@ -229,6 +232,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     exit 1
   fi
   log "starting clean rerun: $CLEAN_RERUN_TAG"
+  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}"
   xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchmark.py" \
     --script_dir "$SCRIPT_DIR" \
     --ag_repo repos/alphageometry \
@@ -247,8 +251,8 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --candidate_max_level 300 \
     --candidate_ddar_timeout 180 \
     --candidate_wall_timeout 90 \
-    --candidate_eval_limit 0 \
-    --candidate_depth_eval_limit 16 \
+    --candidate_eval_limit "$CLEAN_CANDIDATE_EVAL_LIMIT" \
+    --candidate_depth_eval_limit "$CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT" \
     --beam_size 64 \
     --search_depth 4 \
     --num_return_sequences 32 \
@@ -265,7 +269,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --candidate_template_backfill \
     --candidate_rerank value_model_diverse \
     --candidate_value_model "$VALUE_MODEL" \
-    --candidate_ddar_workers 8 \
+    --candidate_ddar_workers "$CLEAN_CANDIDATE_DDAR_WORKERS" \
     --lm_fact_context_top_k 8 \
     >> "outputs/${CLEAN_RERUN_TAG}.log" 2>&1
 fi

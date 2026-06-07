@@ -355,6 +355,8 @@ def candidate_dsl_shape_error(text: str) -> str | None:
         return 'invalid_construction_arity'
       if any(not _POINT_RE.match(arg) for arg in args):
         return 'invalid_construction_arg'
+      if not _construction_args_shape_ok(point, name, args):
+        return 'invalid_construction_args'
     return None
 
   if not text.endswith(';'):
@@ -421,6 +423,27 @@ def _predicate_args_shape_ok(point: str, name: str, args: list[str]) -> bool:
   except Exception:  # pylint: disable=broad-except
     return False
   return construction_name != 'on_aline' or construction_args.count(point) <= 1
+
+
+def _construction_args_shape_ok(point: str, name: str, args: list[str]) -> bool:
+  if name in _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG:
+    if not args or args[0] != point or point in args[1:]:
+      return False
+  if name == 'eqangle3':
+    if point in args or len(args) != 5:
+      return False
+    a, b, d, e, f = args
+    return a != b and len({d, e, f}) == 3
+  other = args[1:] if name in _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG else args
+  if name in {'on_line', 'on_circle', 'on_bline', 'on_dia'}:
+    return len(other) == 2 and other[0] != other[1]
+  if name in {'on_pline', 'on_tline'}:
+    return len(other) == 3 and other[1] != other[2]
+  if name == 'on_circum':
+    return len(other) == 3 and len(set(other)) == 3
+  if name == 'eqdistance':
+    return len(other) == 3 and other[0] != other[1]
+  return True
 
 
 def _dsl_tokenize_prefix(text: str) -> list[str]:
@@ -549,11 +572,19 @@ def _parse_constructive_prefix(
       index += 1
     if index >= len(tokens):
       if has_semicolon:
-        return 'complete' if _arity_accepts(len(args), arity) else 'invalid'
+        if not _arity_accepts(len(args), arity):
+          return 'invalid'
+        return (
+            'complete'
+            if _construction_args_shape_ok(point, name, args)
+            else 'invalid'
+        )
       return 'possible'
     sep = tokens[index]
     if sep == ',':
       if len(args) < min_arity or not _arity_accepts(len(args), arity):
+        return 'invalid'
+      if not _construction_args_shape_ok(point, name, args):
         return 'invalid'
       construction_count += 1
       index += 1
@@ -561,7 +592,11 @@ def _parse_constructive_prefix(
         return 'possible'
       continue
     if sep == ';':
-      return 'complete' if _arity_accepts(len(args), arity) else 'invalid'
+      if not _arity_accepts(len(args), arity):
+        return 'invalid'
+      return (
+          'complete' if _construction_args_shape_ok(point, name, args) else 'invalid'
+      )
     return 'invalid'
   return 'possible'
 

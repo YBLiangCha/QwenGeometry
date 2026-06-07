@@ -176,6 +176,7 @@ def main() -> None:
       candidates = []
       ddar_results: dict[tuple[int | None, str], dict[str, Any]] = {}
       ddar_errors: dict[tuple[int | None, str], dict[str, Any]] = {}
+      filtered_events: dict[tuple[int | None, str], dict[str, Any]] = {}
       root_ddar: dict[str, Any] = {}
       for line_no, event in read_event_file(path):
         kind = event.get('kind')
@@ -192,6 +193,12 @@ def main() -> None:
           raw = event.get('raw') or ''
           key = candidate_key(event.get('depth'), raw)
           ddar_errors[key] = event
+        elif kind == 'candidate_filtered':
+          raw = event.get('raw') or ''
+          reason = event.get('reason') or ''
+          if raw and reason == 'duplicate_canonical':
+            key = candidate_key(event.get('depth'), raw)
+            filtered_events[key] = event
       for line_no, event in candidates:
         raw = event.get('raw') or ''
         translation = event.get('translation') or ''
@@ -202,6 +209,7 @@ def main() -> None:
         key = candidate_key(event.get('depth'), raw)
         ddar = ddar_results.get(key, {})
         ddar_error = ddar_errors.get(key, {})
+        filtered_event = filtered_events.get(key, {})
         added_dependencies = int(ddar.get('added_dependencies') or 0)
         root_added_dependencies = int(root_ddar.get('added_dependencies') or 0)
         progress_delta = added_dependencies - root_added_dependencies
@@ -211,6 +219,7 @@ def main() -> None:
             reason == 'not_error'
             and not ddar
             and not ddar_error
+            and not filtered_event
             and not args.include_unevaluated_valid
         ):
           continue
@@ -228,6 +237,8 @@ def main() -> None:
           reason = 'candidate_solved'
         elif reason == 'not_error' and ddar_error:
           reason = 'candidate_ddar_error'
+        elif reason == 'not_error' and filtered_event:
+          reason = filtered_event.get('reason') or 'candidate_filtered'
         elif (
             reason == 'not_error'
             and not args.disable_progress_positives
@@ -258,6 +269,8 @@ def main() -> None:
             'construction_type': inferred_construction_type(qs, raw, translation),
             'label': label,
             'reason': reason,
+            'filtered_reason': filtered_event.get('reason'),
+            'canonical_key': filtered_event.get('canonical_key'),
             'problem_solved': solved,
             'candidate_solved': candidate_solved,
             'candidate_ddar_status': ddar.get('status'),

@@ -1632,6 +1632,8 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
                 translation=translation,
                 reason='duplicate_canonical',
                 canonical_key=canonical_key,
+                prompt=prompt,
+                target=raw,
                 source=source,
             )
             continue
@@ -1804,6 +1806,8 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
               translation=translation,
               reason='duplicate_canonical',
               canonical_key=canonical_key,
+              prompt=prompt,
+              target=raw,
               source=source,
           )
           continue

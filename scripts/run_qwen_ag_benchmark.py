@@ -301,6 +301,7 @@ def post_canonical_template_backfill(
     qs: Any,
     events_file: str,
     depth: int,
+    prompt: str,
     translated_candidates: list[dict[str, Any]],
     forbidden_points: set[str] | None,
     seen_candidate_keys: set[str],
@@ -345,6 +346,8 @@ def post_canonical_template_backfill(
           translation=translation,
           reason='duplicate_canonical',
           canonical_key=canonical_key,
+          prompt=prompt,
+          target=raw,
           source='template_post_canonical_backfill',
       )
       continue
@@ -643,6 +646,8 @@ def solve_one(
                 translation=translation,
                 reason='duplicate_canonical',
                 canonical_key=canonical_key,
+                prompt=prompt,
+                target=raw,
                 source=source,
             )
             continue
@@ -658,6 +663,7 @@ def solve_one(
               qs,
               events_file,
               depth,
+              prompt,
               translated_candidates,
               forbidden_points,
               seen_candidate_keys,
@@ -955,6 +961,8 @@ def solve_one(
               translation=translation,
               reason='duplicate_canonical',
               canonical_key=canonical_key,
+              prompt=prompt,
+              target=raw,
               source=source,
           )
           continue
@@ -970,6 +978,7 @@ def solve_one(
             qs,
             events_file,
             depth,
+            prompt,
             translated_candidates,
             forbidden_points,
             seen_candidate_keys,

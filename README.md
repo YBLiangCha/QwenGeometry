@@ -51,7 +51,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `semantic_v3_partial_5done_v8_eval_v1`
+  `duplicate_canonical_negative_signal_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -68,11 +68,12 @@ load TkAgg.
   `semantic_point_mask_v4`, `value_rerank_event_scores_v1`, and
   `template_backfill_seen_canonical_v1`, `generation_canonical_dedup_v1`, and
   `template_backfill_generation_dedup_v1`, `template_initial_backfill_source_v1`,
-  and `candidate_value_data_type_inference_v1`
+  `candidate_value_data_type_inference_v1`, and
+  `duplicate_canonical_negative_signal_v1`
 - Latest partial candidate-signal snapshot from the running bench:
-  `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
+  `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_5events_4done_typed_v1`
 - Latest partial value-data snapshot from the running bench:
-  `value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
+  `value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_5events_4done_typed_v1`
 - Reports can highlight newly solved problems by running
   `scripts/analyze_qwen_ag_events.py --baseline_summary_jsonl <previous-summary.jsonl>`
   before rendering with `scripts/report_qwen_ag_analysis.py`.

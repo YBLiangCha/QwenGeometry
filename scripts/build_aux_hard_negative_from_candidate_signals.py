@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument('--summary_file', required=True)
   parser.add_argument(
       '--reasons',
-      default='point_too_close,point_too_far,point_already_exists',
+      default='point_too_close,point_too_far,point_already_exists,duplicate_canonical',
       help='comma-separated hard-negative reasons to keep',
   )
   parser.add_argument(
@@ -108,7 +108,8 @@ def main() -> None:
   seen: set[tuple[str, str]] = set()
   counts: dict[str, int] = {}
   for path, line_no, event in iter_events(events_dir):
-    if event.get('kind') != 'candidate_hard_negative_signal':
+    kind = event.get('kind')
+    if kind not in {'candidate_hard_negative_signal', 'candidate_filtered'}:
       continue
     counts['signals_seen'] = counts.get('signals_seen', 0) + 1
     reason = event.get('reason') or 'unknown'
@@ -116,6 +117,8 @@ def main() -> None:
       counts['signals_skipped'] = counts.get('signals_skipped', 0) + 1
       continue
     row = row_from_event(event, path, line_no)
+    if kind == 'candidate_filtered':
+      row['verdict'] = reason
     if not row['prompt'] or not row['target']:
       counts['missing_prompt_or_target'] = counts.get('missing_prompt_or_target', 0) + 1
       continue

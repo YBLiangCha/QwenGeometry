@@ -6,22 +6,48 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `semantic_v3_partial_5done_v8_eval_v1`
+- Current GitHub source head: `duplicate_canonical_negative_signal_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
   `semantic_point_mask_v3`; it does not include later `semantic_point_mask_v4`
   degenerate-construction filtering or candidate rerank-score event logging,
-  or `template_backfill_seen_canonical_v1`, because the process was already
+  `template_backfill_seen_canonical_v1`, or
+  `duplicate_canonical_negative_signal_v1`, because the process was already
   running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `semantic_v3_partial_5done_v8_eval_v1`, optionally with a new bench tag such as
-  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_dedup_v1`.
+  `duplicate_canonical_negative_signal_v1`, optionally with a new bench tag such
+  as
+  `unsolved_factctx_promptaug_top8_adapter_value_v7_grammar_semantic_v4_scores_dedup_dupneg_v1`.
 - Remote running-workspace scripts are intentionally not overwritten while
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
   is active. The benchmark uses spawn-based candidate workers, so overwriting
   `scripts/` mid-run could mix code versions in future workers. Sync the new
   source after this run completes or immediately before launching the next tag.
+
+## Candidate Quality And Training Signals
+
+### `duplicate_canonical_negative_signal_v1`
+
+- Duplicate-canonical filtered candidates now carry `prompt` and `target` in
+  both `scripts/run_qwen_ag_benchmark.py` and standalone
+  `scripts/qwen_ag_search.py`.
+- `scripts/build_aux_hard_negative_from_candidate_signals.py` now reads
+  `candidate_filtered` events as well as explicit hard-negative events, and
+  includes `duplicate_canonical` in the default hard-negative reasons.
+- `scripts/build_candidate_value_data.py` now preserves duplicate-filtered
+  candidates in value/reranker rows with `reason=duplicate_canonical`,
+  `filtered_reason`, and `canonical_key`.
+- This is a future-run improvement: the currently running
+  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
+  process was launched before this logging change, so its duplicate-filter
+  events lack `prompt/target` and cannot yet generate duplicate hard-negative
+  SFT rows. They can still be counted as duplicate value negatives by matching
+  candidate/filter events.
+- Motivation: the live partial run shows very high duplicate-canonical collapse
+  after generation/backfill. Treating those duplicates as learnable negatives
+  should help the generator and reranker spend DDAR budget on more diverse,
+  directionally useful auxiliary constructions.
 
 ## Completed Bench
 

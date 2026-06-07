@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `semantic_v3_partial_6events_snapshot_v2`
+- Current GitHub source head: `semantic_v3_partial_7events_snapshot_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -26,6 +26,28 @@ changes. Tags are the practical version identifiers for this workspace.
   source after this run completes or immediately before launching the next tag.
 
 ## Candidate Quality And Training Signals
+
+### `semantic_v3_partial_7events_6summary_v1`
+
+- Candidate-signal data:
+  `data/staged_1m_pruned_v2/candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_7events_6summary_v1`
+- Current status at this snapshot: 7 event files, 6 completed summary rows,
+  and still only 1 solved problem:
+  `translated_imo_2004_p1`.
+- Training signal extraction:
+  - positive SFT rows: 212 total, 191 train, 21 eval; 211
+    `ddar_progress_positive`, 1 `candidate_solved`.
+  - hard-negative rows: 961 total, 865 train, 96 eval; 779
+    `point_too_close`, 182 `point_too_far`.
+- Value-model check:
+  `outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1`
+  adds the early `translated_imo_2010_p2` signals, but it is not promoted over
+  v11. On the updated online-rerank distribution v12 improves all-row top-16
+  recall slightly (0.6437 vs v11 0.6360) but regresses top-4, top-8, and the
+  small eval split. Keep v11 as the default clean-rerun value model.
+- Next safe SFT candidate should use this 7-event data rather than the older
+  6-event snapshot if the active benchmark exits before substantially more
+  events arrive.
 
 ### `semantic_v3_partial_6events_5summary_v1`
 

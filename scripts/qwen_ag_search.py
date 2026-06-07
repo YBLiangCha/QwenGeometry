@@ -1593,6 +1593,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
         )
         if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
           seen_raw = {raw for raw, _ in candidates}
+          candidate_sources = {raw: 'lm' for raw, _ in candidates}
           seen_generation_keys = {
               candidate_generation_dedup_key(raw) for raw, _ in candidates
           }
@@ -1606,11 +1607,15 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
             if raw not in seen_raw and generation_key not in seen_generation_keys:
               candidates.append((raw, 0.0))
               seen_raw.add(raw)
+              candidate_sources[raw] = 'template_initial_backfill'
               seen_generation_keys.add(generation_key)
             if len(candidates) >= args.num_return_sequences:
               break
+        else:
+          candidate_sources = {raw: 'lm' for raw, _ in candidates}
         translated_candidates = []
         for raw, lm_score in candidates:
+          source = candidate_sources.get(raw, 'lm')
           translation = try_translate_candidate(raw, g_cur, pr, pt)
           event(
               args.events_file,
@@ -1619,6 +1624,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
               raw=raw,
               translation=translation,
               lm_score=lm_score,
+              source=source,
           )
           if translation.startswith('ERROR:'):
             continue
@@ -1632,6 +1638,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
                 translation=translation,
                 reason='duplicate_canonical',
                 canonical_key=canonical_key,
+                source=source,
             )
             continue
           seen_candidate_keys.add(canonical_key)
@@ -1639,6 +1646,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
               'raw': raw,
               'lm_score': lm_score,
               'translation': translation,
+              'source': source,
           })
         ranked_node_candidates = rerank_candidate_records(
             translated_candidates, args.candidate_rerank, value_model
@@ -1757,6 +1765,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
       )
       if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
         seen_raw = {raw for raw, _ in candidates}
+        candidate_sources = {raw: 'lm' for raw, _ in candidates}
         seen_generation_keys = {
             candidate_generation_dedup_key(raw) for raw, _ in candidates
         }
@@ -1770,11 +1779,15 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
           if raw not in seen_raw and generation_key not in seen_generation_keys:
             candidates.append((raw, 0.0))
             seen_raw.add(raw)
+            candidate_sources[raw] = 'template_initial_backfill'
             seen_generation_keys.add(generation_key)
           if len(candidates) >= args.num_return_sequences:
             break
+      else:
+        candidate_sources = {raw: 'lm' for raw, _ in candidates}
       translated_candidates = []
       for raw, lm_score in candidates:
+        source = candidate_sources.get(raw, 'lm')
         translation = try_translate_candidate(raw, g_cur, pr, pt)
         event(
             args.events_file,
@@ -1783,6 +1796,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
             raw=raw,
             translation=translation,
             lm_score=lm_score,
+            source=source,
         )
         if translation.startswith('ERROR:'):
           continue
@@ -1796,6 +1810,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
               translation=translation,
               reason='duplicate_canonical',
               canonical_key=canonical_key,
+              source=source,
           )
           continue
         seen_candidate_keys.add(canonical_key)
@@ -1803,6 +1818,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
             'raw': raw,
             'lm_score': lm_score,
             'translation': translation,
+            'source': source,
         })
       ranked_candidates = rerank_candidate_records(
           translated_candidates, args.candidate_rerank, value_model

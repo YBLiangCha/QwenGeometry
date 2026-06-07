@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `template_backfill_generation_dedup_v1`
+- Current GitHub source head: `template_initial_backfill_source_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -149,6 +149,17 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: produce an immediately usable typed signal snapshot for construction-family balancing and value/reranker auditing.
 
 ## Next Candidate-Quality Fixes
+
+### `template_initial_backfill_source_v1`
+
+- Initial template backfill candidates are now marked as
+  `source=template_initial_backfill` instead of being logged as `lm`.
+- The source is carried into candidate events, duplicate-filter events,
+  translated candidate records, and generator-side hard-negative signals.
+- Applies in both `scripts/run_qwen_ag_benchmark.py` and standalone
+  `scripts/qwen_ag_search.py`.
+- Purpose: keep source features honest for value-model/reranker audits and make
+  it possible to separate LM distribution errors from template fallback noise.
 
 ### `template_backfill_generation_dedup_v1`
 

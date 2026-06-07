@@ -588,6 +588,7 @@ def solve_one(
             args.candidate_prompt_sampling,
         )
         seen_raw = {raw for raw, _ in candidates}
+        candidate_sources = {raw: 'lm' for raw, _ in candidates}
         seen_generation_keys = {
             qs.candidate_generation_dedup_key(raw) for raw, _ in candidates
         }
@@ -602,11 +603,13 @@ def solve_one(
             if raw not in seen_raw and generation_key not in seen_generation_keys:
               candidates.append((raw, 0.0))
               seen_raw.add(raw)
+              candidate_sources[raw] = 'template_initial_backfill'
               seen_generation_keys.add(generation_key)
             if len(candidates) >= args.num_return_sequences:
               break
         translated_candidates = []
         for raw, lm_score in candidates:
+          source = candidate_sources.get(raw, 'lm')
           translation = qs.try_translate_candidate(raw, g_cur, pr, pt)
           qs.event(
               events_file,
@@ -615,7 +618,7 @@ def solve_one(
               raw=raw,
               translation=translation,
               lm_score=lm_score,
-              source='lm',
+              source=source,
           )
           maybe_log_candidate_hard_negative_signal(
               qs,
@@ -626,6 +629,7 @@ def solve_one(
               translation,
               prompt,
               args,
+              source=source,
           )
           if translation.startswith('ERROR:'):
             continue
@@ -639,7 +643,7 @@ def solve_one(
                 translation=translation,
                 reason='duplicate_canonical',
                 canonical_key=canonical_key,
-                source='lm',
+                source=source,
             )
             continue
           seen_candidate_keys.add(canonical_key)
@@ -647,7 +651,7 @@ def solve_one(
               'raw': raw,
               'lm_score': lm_score,
               'translation': translation,
-              'source': 'lm',
+              'source': source,
           })
         if args.candidate_template_backfill:
           post_canonical_template_backfill(
@@ -895,6 +899,7 @@ def solve_one(
           args.candidate_prompt_sampling,
       )
       seen_raw = {raw for raw, _ in candidates}
+      candidate_sources = {raw: 'lm' for raw, _ in candidates}
       seen_generation_keys = {
           qs.candidate_generation_dedup_key(raw) for raw, _ in candidates
       }
@@ -909,12 +914,14 @@ def solve_one(
           if raw not in seen_raw and generation_key not in seen_generation_keys:
             candidates.append((raw, 0.0))
             seen_raw.add(raw)
+            candidate_sources[raw] = 'template_initial_backfill'
             seen_generation_keys.add(generation_key)
           if len(candidates) >= args.num_return_sequences:
             break
       parallel_tasks = []
       translated_candidates = []
       for raw, lm_score in candidates:
+        source = candidate_sources.get(raw, 'lm')
         translation = qs.try_translate_candidate(raw, g_cur, pr, pt)
         qs.event(
             events_file,
@@ -923,7 +930,7 @@ def solve_one(
             raw=raw,
             translation=translation,
             lm_score=lm_score,
-            source='lm',
+            source=source,
         )
         maybe_log_candidate_hard_negative_signal(
             qs,
@@ -934,6 +941,7 @@ def solve_one(
             translation,
             prompt,
             args,
+            source=source,
         )
         if translation.startswith('ERROR:'):
           continue
@@ -947,7 +955,7 @@ def solve_one(
               translation=translation,
               reason='duplicate_canonical',
               canonical_key=canonical_key,
-              source='lm',
+              source=source,
           )
           continue
         seen_candidate_keys.add(canonical_key)
@@ -955,7 +963,7 @@ def solve_one(
             'raw': raw,
             'lm_score': lm_score,
             'translation': translation,
-            'source': 'lm',
+            'source': source,
         })
       if args.candidate_template_backfill:
         post_canonical_template_backfill(

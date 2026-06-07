@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `template_backfill_seen_canonical_v1`
+- Current GitHub source head: `candidate_signal_partial_snapshot_mode_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -115,8 +115,31 @@ changes. Tags are the practical version identifiers for this workspace.
 - First-problem check at 2026-06-07 21:49 +0800: `translated_imo_2000_p6` completed unsolved, 49 candidates, 39 valid, 10 invalid, 3 duplicate-canonical filters, 16 candidate DDAR errors/timeouts. The run then advanced to `translated_imo_2004_p1`.
 - Early readout: v3 removed most invalid-predicate/unknown-point noise from the first problem, but `translated_imo_2000_p6` is still candidate-DDAR-timeout blocked.
 - Live check at 2026-06-07 22:08 +0800: still running on `translated_imo_2004_p1`, summary rows 1/16. The second problem had reached depth 3 with 1789 candidates, 1489 filtered candidates, 862 canonical duplicates, 627 depth-rank prunes, 49 DDAR runs, 42 verifier-backed candidate SFT signals, and 100 hard-negative signals.
+- Live check at 2026-06-07 22:20 +0800: `translated_imo_2004_p1` solved at depth 3 with aux `n = on_line n e f, on_bline n f e`. The solving candidate target was `n : C e f n 00 D n e n f 01 ;`; candidate DDAR took 79.616 sec and added 415 dependencies. At solve time the problem had 3138 candidates, 2668 filtered candidates, 1790 canonical duplicates, 878 depth-rank prunes, 44 candidate SFT signals, and 152 hard-negative signals. The run then advanced to `translated_imo_2008_p1a`.
+
+### `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_1row_v1`
+
+- Output: `data/staged_1m_pruned_v2/candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_1row_v1`
+- Built with the new partial candidate-signal data mode while the v3 ablation was still running; this reads existing event files only and does not start SFT.
+- Snapshot time: 2026-06-07 22:20 +0800, after `translated_imo_2004_p1` had solved and before the full 16-problem run completed.
+- Positive candidate SFT rows: 44 total, 40 train, 4 eval; counts include 43 `ddar_progress_positive` rows and 1 `candidate_solved` row.
+- Hard-negative rows: 159 total, 144 train, 15 eval; reasons are 111 `point_too_close` and 48 `point_too_far`.
+- Purpose: let us mine verifier-backed aux-construction signal from long-running partial benches instead of waiting for all 16 problems before any data can be inspected.
 
 ## Next Candidate-Quality Fixes
+
+### `candidate_signal_partial_snapshot_mode_v1`
+
+- Adds `ALLOW_PARTIAL=1` to
+  `data/synth_cpt_1m_pruned_v2/run_candidate_signal_data_after_ablation_wait.sh`.
+- Default behavior is unchanged: the queue still waits until
+  `EXPECTED_PROBLEMS` summary rows are present.
+- In partial mode the data builder may proceed once configurable thresholds are
+  met: `MIN_PARTIAL_SUMMARY_ROWS`, `MIN_PARTIAL_SFT_SIGNALS`, and
+  `MIN_PARTIAL_HARD_NEGATIVE_SIGNALS`.
+- Purpose: support training-data inspection and snapshot extraction from
+  long-running ablations without forcing candidate-signal SFT to wait for a
+  full 16/16 benchmark.
 
 ### `template_backfill_seen_canonical_v1`
 

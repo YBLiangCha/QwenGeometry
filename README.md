@@ -49,7 +49,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `template_backfill_seen_canonical_v1`
+  `candidate_signal_partial_snapshot_mode_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -61,6 +61,8 @@ load TkAgg.
 - Next clean candidate-quality code baseline after the running process:
   `semantic_point_mask_v4`, `value_rerank_event_scores_v1`, and
   `template_backfill_seen_canonical_v1`
+- Partial candidate-signal snapshot from the running bench:
+  `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_1row_v1`
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `postrun_clean_depth24_queue_v1`
+- Current GitHub source head: `postrun_signal_repeat_depth24_queue_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -54,6 +54,18 @@ changes. Tags are the practical version identifiers for this workspace.
 - The active semantic-v3 benchmark is still untouched; this only changes the
   postrun queue that waits for it to finish before training and launching the
   clean rerun.
+
+### `postrun_signal_repeat_depth24_queue_v1`
+
+- Adds `SIGNAL_REPEAT` to the postrun queue, defaulting to 4 for the training
+  mix only. Eval rows are not repeated.
+- Motivation: the postrun candidate-signal set is expected to be hundreds of
+  rows, while the fact-context replay set contributes up to 2000 train rows.
+  Repeating positive DDAR-progress/candidate-solved rows keeps the SFT focused
+  on the new auxiliary-construction signal instead of letting it be diluted by
+  fact-context replay.
+- This keeps the clean rerun at the depth-24 budget introduced by
+  `postrun_clean_depth24_queue_v1`.
 
 ### `semantic_v3_partial_7events_6summary_v1`
 

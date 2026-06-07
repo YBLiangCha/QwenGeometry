@@ -51,7 +51,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `postrun_clean_depth24_queue_v1`
+  `postrun_signal_repeat_depth24_queue_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -90,6 +90,9 @@ load TkAgg.
 - The postrun clean rerun now defaults to `CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT=24`
   to match the high-budget unsolved-run budget more closely; set it lower only
   for fast ablations.
+- Candidate-signal rows are repeated by `SIGNAL_REPEAT=4` by default in the
+  postrun SFT train mix, so the new DDAR-progress positives are not swamped by
+  the larger fact-context replay set. Evaluation rows are not repeated.
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

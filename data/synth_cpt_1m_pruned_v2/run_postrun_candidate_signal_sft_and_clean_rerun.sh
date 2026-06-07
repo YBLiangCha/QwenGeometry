@@ -42,6 +42,7 @@ RUN_SUMMARY=${RUN_SUMMARY:-$SFT_WORK_DIR/summary.json}
 
 MAX_FACT_MIX_ROWS=${MAX_FACT_MIX_ROWS:-2000}
 MAX_FACT_EVAL_ROWS=${MAX_FACT_EVAL_ROWS:-400}
+SIGNAL_REPEAT=${SIGNAL_REPEAT:-4}
 USE_HARD_NEGATIVES=${USE_HARD_NEGATIVES:-1}
 UNLIKELIHOOD_WEIGHT=${UNLIKELIHOOD_WEIGHT:-0.1}
 TRAIN_SFT=${TRAIN_SFT:-1}
@@ -58,7 +59,7 @@ VALUE_MODEL=${VALUE_MODEL:-outputs/candidate_value_model_v11_logistic_preddar_no
 LOG=${LOG:-outputs/${SFT_TAG}.postrun_queue.log}
 mkdir -p "$(dirname "$LOG")" "$DATA_DIR" "$SFT_WORK_DIR"
 export ANALYSIS_JSON REPORT_MD HARD_NEG_TRAIN HARD_NEG_EVAL HARD_NEG_SUMMARY
-export USE_HARD_NEGATIVES UNLIKELIHOOD_WEIGHT MAX_FACT_MIX_ROWS MAX_FACT_EVAL_ROWS
+export USE_HARD_NEGATIVES UNLIKELIHOOD_WEIGHT MAX_FACT_MIX_ROWS MAX_FACT_EVAL_ROWS SIGNAL_REPEAT
 
 log() {
   date '+%F %T %z' | tr -d '\n' | tee -a "$LOG"
@@ -114,6 +115,7 @@ from pathlib import Path
 signal_train, signal_eval, fact_train, fact_eval, mixed_train, mixed_eval, run_summary = map(Path, sys.argv[1:])
 max_fact_train = int(os.environ.get('MAX_FACT_MIX_ROWS', '2000'))
 max_fact_eval = int(os.environ.get('MAX_FACT_EVAL_ROWS', '400'))
+signal_repeat = max(1, int(os.environ.get('SIGNAL_REPEAT', '4')))
 
 def read_jsonl(path: Path, limit: int | None = None):
     rows = []
@@ -135,7 +137,7 @@ signal_train_rows = read_jsonl(signal_train)
 signal_eval_rows = read_jsonl(signal_eval)
 fact_train_rows = read_jsonl(fact_train, max_fact_train)
 fact_eval_rows = read_jsonl(fact_eval, max_fact_eval)
-mixed_train_rows = signal_train_rows + fact_train_rows
+mixed_train_rows = signal_train_rows * signal_repeat + fact_train_rows
 mixed_eval_rows = signal_eval_rows + fact_eval_rows
 write_jsonl(mixed_train, mixed_train_rows)
 write_jsonl(mixed_eval, mixed_eval_rows)
@@ -144,6 +146,7 @@ summary = {
     'status': 'prepared',
     'signal_train_rows': len(signal_train_rows),
     'signal_eval_rows': len(signal_eval_rows),
+    'signal_repeat': signal_repeat,
     'fact_train_rows': len(fact_train_rows),
     'fact_eval_rows': len(fact_eval_rows),
     'mixed_train_rows': len(mixed_train_rows),

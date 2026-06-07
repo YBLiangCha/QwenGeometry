@@ -66,6 +66,10 @@ def render_report(payload: dict[str, Any]) -> str:
   completed = [problem for problem in problems if problem.get('completed')]
   unsolved = [problem for problem in completed if not problem.get('solved')]
   solved = [problem for problem in completed if problem.get('solved')]
+  new_solved_names = set(payload.get('new_solved_names') or [])
+  new_solved = [
+      problem for problem in solved if problem.get('problem') in new_solved_names
+  ]
   candidates = int(aggregate.get('candidates') or 0)
   invalid = int(aggregate.get('invalid_candidates') or 0)
   filtered = int(aggregate.get('filtered_total') or 0)
@@ -73,6 +77,25 @@ def render_report(payload: dict[str, Any]) -> str:
   lines = [
       '# Qwen+AG Failure Analysis',
       '',
+  ]
+  if new_solved:
+    lines.extend([
+        '## New Solved Vs Baseline',
+        '',
+        f"- NEW SOLVED COUNT: {len(new_solved)}",
+    ])
+    for problem in new_solved:
+      lines.append(
+          f"- NEW SOLVED: `{problem.get('problem')}` "
+          f"depth={problem.get('solved_depth')} "
+          f"aux=`{problem.get('aux')}` "
+          f"type={problem.get('solved_aux_construction_type') or '-'}"
+      )
+    lines.extend([
+        f"- Baseline summary: `{payload.get('baseline_summary_jsonl')}`",
+        '',
+    ])
+  lines.extend([
       '## Summary',
       '',
       f"- Output dir: `{payload.get('out_dir')}`",
@@ -80,6 +103,8 @@ def render_report(payload: dict[str, Any]) -> str:
       f"- Completed problems: {payload.get('num_completed', 0)}",
       f"- Solved problems: {payload.get('num_solved', 0)}",
       f"- Solved names: {', '.join(payload.get('solved_names') or []) or '-'}",
+      f"- New solved vs baseline: "
+      f"{', '.join(payload.get('new_solved_names') or []) or '-'}",
       f"- Candidates: {candidates}",
       f"- Valid / invalid: {aggregate.get('valid_candidates', 0)} / {invalid}"
       f" ({fmt_rate(invalid, candidates)} invalid)",
@@ -93,6 +118,8 @@ def render_report(payload: dict[str, Any]) -> str:
       f"- Candidate hard-negative signals: "
       f"{aggregate.get('candidate_hard_negative_signals', 0)} "
       f"({fmt_count_map(aggregate.get('candidate_hard_negative_signal_reasons'))})",
+  ])
+  lines.extend([
       '',
       '## Aggregate Diagnosis',
       '',
@@ -138,7 +165,7 @@ def render_report(payload: dict[str, Any]) -> str:
       '',
       '| Problem | Solved | Cand | Invalid | Dup | DDAR | DDAR Errors | Max Added/Type | Diagnosis |',
       '|---|---:|---:|---:|---:|---:|---|---|---|',
-  ]
+  ])
   lines.extend(problem_line(problem) for problem in problems)
   lines.extend([
       '',

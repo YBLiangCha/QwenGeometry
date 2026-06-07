@@ -49,7 +49,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `semantic_v3_partial_4events_snapshot_v1`
+  `new_solved_baseline_highlight_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -67,6 +67,9 @@ load TkAgg.
   `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
 - Latest partial value-data snapshot from the running bench:
   `value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
+- Reports can highlight newly solved problems by running
+  `scripts/analyze_qwen_ag_events.py --baseline_summary_jsonl <previous-summary.jsonl>`
+  before rendering with `scripts/report_qwen_ag_analysis.py`.
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

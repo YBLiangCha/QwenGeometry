@@ -447,6 +447,10 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument('--out_dir', help='benchmark output dir containing events/ and summary.jsonl')
   parser.add_argument('--events_dir')
   parser.add_argument('--summary_jsonl')
+  parser.add_argument(
+      '--baseline_summary_jsonl',
+      help='optional previous benchmark summary.jsonl for new-solved detection',
+  )
   parser.add_argument('--out_file')
   parser.add_argument('--top_problems', type=int, default=0)
   return parser.parse_args()
@@ -464,6 +468,15 @@ def main() -> None:
       else (out_dir / 'summary.jsonl' if out_dir else None)
   )
   summary = load_summary(summary_jsonl)
+  baseline_summary = (
+      load_summary(Path(args.baseline_summary_jsonl))
+      if args.baseline_summary_jsonl
+      else {}
+  )
+  baseline_solved_names = sorted(
+      name for name, row in baseline_summary.items() if row.get('solved')
+  )
+  baseline_solved_set = set(baseline_solved_names)
   problems = [
       analyze_problem(path, summary)
       for path in sorted(events_dir.glob('*.jsonl'))
@@ -510,14 +523,27 @@ def main() -> None:
       if p.get('solved_aux_construction_type')
   )
   solved_names = [p['problem'] for p in problems if p.get('solved')]
+  new_solved_names = [
+      name
+      for name in solved_names
+      if args.baseline_summary_jsonl and name not in baseline_solved_set
+  ]
   payload = {
       'out_dir': str(out_dir) if out_dir else None,
       'events_dir': str(events_dir),
       'summary_jsonl': str(summary_jsonl) if summary_jsonl else None,
+      'baseline_summary_jsonl': (
+          str(Path(args.baseline_summary_jsonl))
+          if args.baseline_summary_jsonl
+          else None
+      ),
+      'baseline_solved_names': baseline_solved_names,
       'num_event_files': len(problems),
       'num_completed': sum(1 for p in problems if p.get('completed')),
       'num_solved': len(solved_names),
       'solved_names': solved_names,
+      'num_new_solved': len(new_solved_names),
+      'new_solved_names': new_solved_names,
       'aggregate_diagnosis': dict(aggregate_counts),
       'aggregate': {
           'candidates': sum(p['candidates'] for p in problems),

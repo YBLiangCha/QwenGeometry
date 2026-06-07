@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `semantic_v3_partial_4events_snapshot_v1`
+- Current GitHub source head: `new_solved_baseline_highlight_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -15,8 +15,7 @@ changes. Tags are the practical version identifiers for this workspace.
   or `template_backfill_seen_canonical_v1`, because the process was already
   running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `semantic_v3_partial_4events_snapshot_v1`, optionally with a new bench tag
-  such as
+  `new_solved_baseline_highlight_v1`, optionally with a new bench tag such as
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_dedup_v1`.
 - Remote running-workspace scripts are intentionally not overwritten while
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
@@ -198,6 +197,22 @@ changes. Tags are the practical version identifiers for this workspace.
 - Purpose: current best partial SFT/hard-negative snapshot while waiting for the full 16-problem run.
 
 ## Next Candidate-Quality Fixes
+
+### `new_solved_baseline_highlight_v1`
+
+- `scripts/analyze_qwen_ag_events.py` now accepts `--baseline_summary_jsonl`.
+- Analysis JSON now records `baseline_summary_jsonl`, `baseline_solved_names`,
+  `num_new_solved`, and `new_solved_names`.
+- `scripts/report_qwen_ag_analysis.py` renders a top-of-report
+  `New Solved Vs Baseline` block before the ordinary failure-analysis summary.
+- Verification run against baseline
+  `outputs/final_eval_imo_ag30_qwen_unsolved_high_budget_value_v3_cost_template_depth16_v1/summary.jsonl`
+  produced:
+  - Analysis: `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_analysis_v4_baseline.json`
+  - Report: `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_report_v4_baseline.md`
+  - `new_solved_names`: `translated_imo_2004_p1`.
+- Purpose: make newly solved problems impossible to miss in future status
+  reports, since this is the primary expected signal from the optimization loop.
 
 ### `candidate_value_data_type_inference_v1`
 

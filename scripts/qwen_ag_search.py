@@ -42,7 +42,7 @@ _CONSTRAINED_PREDICATE_ARITY: dict[str, int | tuple[int, ...]] = {
 _CONSTRUCTIVE_ARG_ARITY: dict[str, int | tuple[int, ...]] = {
     'angle_bisector': 4,
     'angle_mirror': 4,
-    'eqangle3': 6,
+    'eqangle3': 5,
     'eqdistance': 4,
     'on_aline': 6,
     'on_aline2': 6,
@@ -297,7 +297,7 @@ def candidate_prompt_prefixes(
         f'{new_point} = on_pline {new_point} ',
         f'{new_point} = on_tline {new_point} ',
         f'{new_point} = on_circle {new_point} ',
-        f'{new_point} = eqangle3 {new_point} ',
+        f'{new_point} = eqangle3 ',
     ])
   return prefixes
 
@@ -960,7 +960,7 @@ def translate_constrained_to_constructive(
       if a == c == e == g and h == point:
         return 'angle_mirror', [point, b, a, d]
       if a == point and c == point and e == g:
-        return 'eqangle3', [point, b, d, e, f, h]
+        return 'eqangle3', [b, d, e, f, h]
       if b == point and a == c and e == g:
         return 'on_aline', [point, a, d, f, e, h]
       if a == point and c == point and e == g:
@@ -976,7 +976,7 @@ def translate_constrained_to_constructive(
     if point == d and x == y:
       return 'angle_bisector', [point, b, x, c]
     if point == x:
-      return 'eqangle3', [x, a, b, y, c, d]
+      return 'eqangle3', [a, b, y, c, d]
     return 'on_aline', [a, x, b, c, y, d]
 
   if name in ['cyclic', 'O']:

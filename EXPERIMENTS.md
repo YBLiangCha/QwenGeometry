@@ -6,7 +6,7 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `candidate_value_data_type_inference_v1`
+- Current GitHub source head: `semantic_v3_partial_4events_snapshot_v1`
 - Current running bench tag:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Running bench code behavior: includes semantic point/predicate fixes through
@@ -15,8 +15,9 @@ changes. Tags are the practical version identifiers for this workspace.
   or `template_backfill_seen_canonical_v1`, because the process was already
   running when those commits were made.
 - Next clean code baseline for a rerun: source head
-  `template_backfill_seen_canonical_v1`, optionally with a new bench tag such as
-  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_v1`.
+  `semantic_v3_partial_4events_snapshot_v1`, optionally with a new bench tag
+  such as
+  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v4_scores_dedup_v1`.
 - Remote running-workspace scripts are intentionally not overwritten while
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
   is active. The benchmark uses spawn-based candidate workers, so overwriting
@@ -37,6 +38,19 @@ changes. Tags are the practical version identifiers for this workspace.
 - Main observed bottleneck: canonical duplicate collapse remained very high; several problems were DDAR-timeout blocked or made symbolic progress in the wrong direction.
 
 ## Value Models
+
+### `value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
+
+- Output: `data/staged_1m_pruned_v2/value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2/candidate_value_rows.jsonl`
+- Built from four current v3 event files with local `candidate_value_data_type_inference_v1` scripts staged under `/tmp`, without modifying the active remote benchmark scripts.
+- Snapshot time: 2026-06-07 23:01 +0800.
+- Benchmark state at snapshot: 4 event files, 3 completed summary rows, 1 solved problem (`translated_imo_2004_p1`); `translated_imo_2008_p1b` was in progress.
+- Rows: 6208 total, 136 positive, 6072 negative.
+- Positive reasons: 135 `ddar_progress_positive`, 1 `solved_aux`.
+- Main negative reasons: 2670 `valid_nonwinning`, 2368 `valid_but_unsolved`, 454 `point_too_close`, 430 `other_error`, 96 `point_too_far`, 32 `invalid_quad_solve`, 20 `candidate_ddar_error`.
+- Top construction types in value rows: `on_circum`: 894, `on_pline`: 819, `on_line+on_line`: 814, `on_tline`: 792, `on_line`: 699, `on_circle`: 646, `eqangle3`: 515.
+- Sources: `lm`: 5016, `template_post_canonical_backfill`: 1192.
+- Purpose: provide the latest typed reranker/value data snapshot from the live run, including partial progress on `translated_imo_2008_p1b`.
 
 ### `value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_typed_v1`
 
@@ -138,6 +152,19 @@ changes. Tags are the practical version identifiers for this workspace.
   - Candidate SFT signals: 54.
   - Candidate hard negatives: 207 (`point_too_close`: 154, `point_too_far`: 53).
   - Decision: keep the v3 run alive because it solved a genuinely new problem and is producing SFT/hard-negative signal. Do not restart solely for the later template-backfill duplicate fix; apply `template_backfill_seen_canonical_v1` on the next clean rerun.
+- Partial analysis snapshot at 2026-06-07 23:01 +0800:
+  - Analysis: `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_analysis_v2.json`
+  - Report: `outputs/unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_report_v2.md`
+  - Completed 3/16, solved 1/3 completed (`translated_imo_2004_p1`); event files: 4.
+  - Aggregate candidates: 6208; valid/invalid 5194/1014, invalid rate 16.3%.
+  - Filtered total: 4831; canonical duplicates 3009, 48.5% vs candidates.
+  - Candidate DDAR done/errors: 126/20.
+  - Candidate SFT signals: 105.
+  - Candidate hard negatives: 456 (`point_too_close`: 371, `point_too_far`: 85).
+  - Top generated construction types: `on_tline`: 769, `on_circum`: 765, `on_pline`: 700, `on_line`: 698, `on_circle`: 646, `on_line+on_line`: 461.
+  - Top hard-negative construction types: `on_line+on_line`: 240, `on_bline+on_line`: 54, `eqangle3`: 40, `on_circum+on_line`: 36, `on_circum`: 23.
+  - `translated_imo_2008_p1a` completed unsolved with diagnosis `duplicate_collapse`, `candidate_ddar_timeouts`, and `symbolic_progress_but_wrong_direction`.
+  - `translated_imo_2008_p1b` was in progress with 406 candidates, 314 valid, 92 invalid, 79 canonical duplicates, 16 DDAR runs, and diagnosis `symbolic_progress_but_wrong_direction`.
 
 ### `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_1row_v1`
 
@@ -158,6 +185,17 @@ changes. Tags are the practical version identifiers for this workspace.
 - Positive train construction types top: `on_circum`: 8, `on_circle`: 7, `on_bline+on_line`: 6, `eqangle3`: 6.
 - Hard-negative train construction types top: `on_line+on_line`: 126, `on_bline+on_line`: 42, `eqangle3`: 32, `on_circum+on_line`: 25.
 - Purpose: produce an immediately usable typed signal snapshot for construction-family balancing and value/reranker auditing.
+
+### `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
+
+- Output: `data/staged_1m_pruned_v2/candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
+- Built from the four-event-file v3 partial snapshot with local updated builders staged under `/tmp`; this did not touch active remote benchmark scripts.
+- Snapshot time: 2026-06-07 23:01 +0800.
+- Positive candidate SFT rows: 105 total, 95 train, 10 eval; counts include 104 `ddar_progress_positive` rows and 1 `candidate_solved` row.
+- Companion hard-negative output: `data/staged_1m_pruned_v2/candidate_hardneg_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
+- Hard-negative rows: 456 total, 411 train, 45 eval; reasons are 371 `point_too_close` and 85 `point_too_far`.
+- Hard-negative construction types top: `on_line+on_line`: 240, `on_bline+on_line`: 54, `eqangle3`: 40, `on_circum+on_line`: 36, `on_circum`: 23.
+- Purpose: current best partial SFT/hard-negative snapshot while waiting for the full 16-problem run.
 
 ## Next Candidate-Quality Fixes
 

@@ -49,7 +49,7 @@ load TkAgg.
 ## Current Main Tags
 
 - Current GitHub source head:
-  `candidate_value_data_type_inference_v1`
+  `semantic_v3_partial_4events_snapshot_v1`
 - Current running 16-problem bench:
   `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Last completed high-budget bench:
@@ -63,8 +63,10 @@ load TkAgg.
   `template_backfill_seen_canonical_v1`, `generation_canonical_dedup_v1`, and
   `template_backfill_generation_dedup_v1`, `template_initial_backfill_source_v1`,
   and `candidate_value_data_type_inference_v1`
-- Partial candidate-signal snapshot from the running bench:
-  `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_typed_v1`
+- Latest partial candidate-signal snapshot from the running bench:
+  `candidate_signals_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
+- Latest partial value-data snapshot from the running bench:
+  `value_data_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_partial_4events_typed_v2`
 
 See `EXPERIMENTS.md` for detailed tag-to-output mappings.
 

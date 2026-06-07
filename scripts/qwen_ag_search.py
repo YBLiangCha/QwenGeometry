@@ -71,6 +71,20 @@ _HIGH_VALUE_CONSTRUCTION_TYPES = {
     'on_circum',
     'on_dia',
 }
+_VERIFIER_PRIOR_TYPE_BONUS = {
+    # Repeated online SFT positives in the unsolved benchmark, under-ranked by
+    # the pre-run value model. Keep these modest; diversity still gates coverage.
+    'on_bline+on_line': 2.5,
+    'eqdistance+on_line': 2.0,
+    'on_dia+on_line': 1.0,
+    'on_tline+on_tline': 1.0,
+    'on_circle+on_tline': 1.0,
+    'on_bline': 1.0,
+    'eqangle3': 0.8,
+    'on_aline': 0.8,
+    'on_circle+on_line': 0.7,
+    'on_circum+on_line': 0.7,
+}
 _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG = (
     set(_CONSTRUCTIVE_ARG_ARITY) - {'eqangle3'}
 )
@@ -1077,6 +1091,9 @@ def score_candidate_value_model(
   score = bias
   for token in _candidate_value_tokens(record):
     score += float(weights.get(token, 0.0))
+  score += _VERIFIER_PRIOR_TYPE_BONUS.get(
+      construction_type_key(str(record.get('translation') or '')), 0.0
+  )
   return score
 
 

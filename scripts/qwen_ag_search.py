@@ -1580,7 +1580,6 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
   )
   beam = BeamQueue(args.beam_size)
   beam.add((g, prompt0, p.txt()), 0.0)
-  seen_candidate_keys: set[str] = set()
   value_model = load_candidate_value_model(args.candidate_value_model)
 
   for depth in range(args.search_depth):
@@ -1631,7 +1630,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
           for raw in template_backfill_candidates(
               forbidden_points,
               needed * 4,
-              seen_candidate_keys if args.candidate_canonical_dedup else None,
+              seen_generation_keys if args.candidate_canonical_dedup else None,
               goal_point_names(p_cur),
           ):
             generation_key = candidate_generation_dedup_key(raw)
@@ -1644,6 +1643,8 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
               break
         else:
           candidate_sources = {raw: 'lm' for raw, _ in candidates}
+        # Dedup within this proof state; pruned auxes may still help other branches.
+        seen_candidate_keys: set[str] = set()
         translated_candidates = []
         for raw, lm_score in candidates:
           source = candidate_sources.get(raw, 'lm')
@@ -1807,7 +1808,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
         for raw in template_backfill_candidates(
             forbidden_points,
             needed * 4,
-            seen_candidate_keys if args.candidate_canonical_dedup else None,
+            seen_generation_keys if args.candidate_canonical_dedup else None,
             goal_point_names(p_cur),
         ):
           generation_key = candidate_generation_dedup_key(raw)
@@ -1820,6 +1821,8 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
             break
       else:
         candidate_sources = {raw: 'lm' for raw, _ in candidates}
+      # Dedup within this proof state; pruned auxes may still help other branches.
+      seen_candidate_keys: set[str] = set()
       translated_candidates = []
       for raw, lm_score in candidates:
         source = candidate_sources.get(raw, 'lm')

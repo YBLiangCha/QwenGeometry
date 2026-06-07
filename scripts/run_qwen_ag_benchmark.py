@@ -548,7 +548,6 @@ def solve_one(
   candidate_max_level = args.candidate_max_level or args.max_level
   candidate_timeout = args.candidate_ddar_timeout or args.ddar_timeout
   candidate_wall_timeout = args.candidate_wall_timeout or candidate_timeout
-  seen_candidate_keys: set[str] = set()
   value_model = getattr(args, '_candidate_value_model', None)
 
   for depth in range(args.search_depth):
@@ -596,12 +595,14 @@ def solve_one(
         seen_generation_keys = {
             qs.candidate_generation_dedup_key(raw) for raw, _ in candidates
         }
+        # Dedup within this proof state; pruned auxes may still help other branches.
+        seen_candidate_keys: set[str] = set()
         if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
           needed = args.num_return_sequences - len(candidates)
           for raw in qs.template_backfill_candidates(
               forbidden_points,
               needed * 4,
-              seen_candidate_keys if args.candidate_canonical_dedup else None,
+              seen_generation_keys if args.candidate_canonical_dedup else None,
               qs.goal_point_names(p_cur),
           ):
             generation_key = qs.candidate_generation_dedup_key(raw)
@@ -912,12 +913,14 @@ def solve_one(
       seen_generation_keys = {
           qs.candidate_generation_dedup_key(raw) for raw, _ in candidates
       }
+      # Dedup within this proof state; pruned auxes may still help other branches.
+      seen_candidate_keys: set[str] = set()
       if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
         needed = args.num_return_sequences - len(candidates)
         for raw in qs.template_backfill_candidates(
             forbidden_points,
             needed * 4,
-            seen_candidate_keys if args.candidate_canonical_dedup else None,
+            seen_generation_keys if args.candidate_canonical_dedup else None,
             qs.goal_point_names(p_cur),
         ):
           generation_key = qs.candidate_generation_dedup_key(raw)

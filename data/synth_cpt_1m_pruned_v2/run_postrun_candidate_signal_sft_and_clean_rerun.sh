@@ -51,6 +51,8 @@ FORCE_TRAIN=${FORCE_TRAIN:-0}
 RUN_CLEAN_RERUN=${RUN_CLEAN_RERUN:-0}
 CLEAN_CANDIDATE_EVAL_LIMIT=${CLEAN_CANDIDATE_EVAL_LIMIT:-0}
 CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT=${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT:-48}
+CLEAN_CANDIDATE_DDAR_TIMEOUT=${CLEAN_CANDIDATE_DDAR_TIMEOUT:-240}
+CLEAN_CANDIDATE_WALL_TIMEOUT=${CLEAN_CANDIDATE_WALL_TIMEOUT:-150}
 CLEAN_CANDIDATE_DDAR_WORKERS=${CLEAN_CANDIDATE_DDAR_WORKERS:-8}
 CLEAN_BEAM_SIZE=${CLEAN_BEAM_SIZE:-64}
 CLEAN_SEARCH_DEPTH=${CLEAN_SEARCH_DEPTH:-4}
@@ -239,7 +241,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     exit 1
   fi
   log "starting clean rerun: $CLEAN_RERUN_TAG"
-  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}"
+  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}"
   xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchmark.py" \
     --script_dir "$SCRIPT_DIR" \
     --ag_repo repos/alphageometry \
@@ -256,8 +258,8 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --root_max_level 1000 \
     --root_ddar_timeout 600 \
     --candidate_max_level 300 \
-    --candidate_ddar_timeout 180 \
-    --candidate_wall_timeout 90 \
+    --candidate_ddar_timeout "$CLEAN_CANDIDATE_DDAR_TIMEOUT" \
+    --candidate_wall_timeout "$CLEAN_CANDIDATE_WALL_TIMEOUT" \
     --candidate_eval_limit "$CLEAN_CANDIDATE_EVAL_LIMIT" \
     --candidate_depth_eval_limit "$CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT" \
     --beam_size "$CLEAN_BEAM_SIZE" \

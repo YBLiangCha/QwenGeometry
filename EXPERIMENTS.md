@@ -6,19 +6,18 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `postv12_decode_beam_limit_v1`
-  (`a1697a3`).
+- Current GitHub source head: `postv12_v12_primary_v18_coverage_v1`.
 - Current running v12 clean bench tag:
   `unsolved_factctx_promptaug_top8_candidate_signal_postrun_value_v12_default_v1_depth48_t240_w150_nrs48_qm3_sigrep4_blinedia_statededup_nodediv_dsltpl_combotpl_rarecombo_vprior_v1`.
 - Current v12 clean source snapshot:
   `/tmp/qwen_ag_scripts_c541dd4` (`value_v12_default_queue_v1`). This active
   process is intentionally not overwritten.
 - Current waiting scout queue source:
-  `/tmp/qwen_ag_scripts_a1697a3`, tag
-  `unsolved_factctx_promptaug_top8_hybrid_v18_solvedonly_front12_v12_scout_after_v12_depth16_decbeam16_t160_w100_nrs48_qm3_timeoutfb4_beamscore_rerank_v1`.
+  `/tmp/qwen_ag_scripts_postv12_v12_primary_v18_coverage_v1`, tag
+  `unsolved_factctx_promptaug_top8_hybrid_v12_front12_v18coverage_after_v12_depth16_decbeam16_t160_w100_nrs48_qm3_timeoutfb4_beamscore_rerank_salvage_v1`.
 - Current waiting post-v12 stage4 queue source:
-  `/tmp/qwen_ag_scripts_a1697a3`, tag
-  `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v18_front12_beamscore_rerank_decbeam16_depth24_t200_w120_nrs48_qm3_timeoutfb4_v1`.
+  `/tmp/qwen_ag_scripts_postv12_v12_primary_v18_coverage_v1`, tag
+  `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front12_v18coverage_beamscore_rerank_decbeam16_depth24_t200_w120_nrs48_qm3_timeoutfb4_salvage_v1`.
 - Running-workspace scripts are intentionally versioned in `/tmp` snapshots
   rather than overwritten in-place. The benchmark uses spawn-based candidate
   workers, so mixing source versions inside a long process can corrupt
@@ -761,6 +760,24 @@ changes. Tags are the practical version identifiers for this workspace.
   candidates while only a small depth-eval window was DDAR-checked. Once beam
   scores are value-rerank driven, decoding only the top beam states should
   reduce wasted generation and keep later-depth search focused.
+
+### `postv12_v12_primary_v18_coverage_v1`
+
+- Git tag: `postv12_v12_primary_v18_coverage_v1`.
+- Adds `SCOUT_REFRESH_VALUE_ROLE={primary,secondary,none}` to the scout queue.
+  The refreshed post-v12 pairwise value model can now be trained after the
+  reference run and attached as the secondary coverage model instead of
+  overwriting the primary value model.
+- Changes the scout default to v12 logistic primary with v16 pairwise coverage;
+  the deployed queue trains `v18_pairwise_postv12_solvedonly_timeoutfb4_v1`
+  with progress positives disabled and uses it as secondary coverage.
+- Changes the stage4 clean default to v12 primary plus v18 solved-only
+  coverage, with v16 as a secondary fallback if the refreshed v18 model is not
+  present.
+- Motivation: a preview model trained from the first 5 rows of the active v12
+  clean run improved over v16 but still underperformed the v12 logistic model
+  on partial-data AUC/top-k recall. Keeping v12 as the primary frontfill
+  scorer is therefore safer, while v18 still contributes solved-only coverage.
 
 ## Versioning Rule
 

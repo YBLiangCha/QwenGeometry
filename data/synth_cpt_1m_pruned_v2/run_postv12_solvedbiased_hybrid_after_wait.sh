@@ -31,10 +31,11 @@ POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v1}
 SFT_OUT=${SFT_OUT:-outputs/stage4_candidate_signal_solvedbiased_after_v12_${POSTRUN_TAG}}
 BASE_ADAPTER=${BASE_ADAPTER:-outputs/stage3_candidate_signal_after_factctx_lora_qwen2_5_7b_candidate_signal_sft_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_postrun_value_v12_default_v1}
 
-PREFERRED_VALUE_MODEL=${PREFERRED_VALUE_MODEL:-outputs/candidate_value_model_v18_pairwise_postv12_solvedonly_timeoutfb4_v1/candidate_value_model.json}
+PREFERRED_VALUE_MODEL=${PREFERRED_VALUE_MODEL:-outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1/candidate_value_model.json}
 FALLBACK_VALUE_MODEL=${FALLBACK_VALUE_MODEL:-outputs/candidate_value_model_v16_pairwise_solved_biased_progress_filter_oldfull_current4_v1/candidate_value_model.json}
 VALUE_MODEL=${VALUE_MODEL:-$PREFERRED_VALUE_MODEL}
-CLEAN_SECONDARY_VALUE_MODEL=${CLEAN_SECONDARY_VALUE_MODEL:-outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1/candidate_value_model.json}
+CLEAN_SECONDARY_VALUE_MODEL=${CLEAN_SECONDARY_VALUE_MODEL:-outputs/candidate_value_model_v18_pairwise_postv12_solvedonly_timeoutfb4_v1/candidate_value_model.json}
+FALLBACK_SECONDARY_VALUE_MODEL=${FALLBACK_SECONDARY_VALUE_MODEL:-outputs/candidate_value_model_v16_pairwise_solved_biased_progress_filter_oldfull_current4_v1/candidate_value_model.json}
 CLEAN_CANDIDATE_RERANK=${CLEAN_CANDIDATE_RERANK:-value_model_frontfill_diverse}
 CLEAN_FRONTFILL_LIMIT=${CLEAN_FRONTFILL_LIMIT:-12}
 CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT=${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT:-24}
@@ -44,7 +45,7 @@ CLEAN_CANDIDATE_WALL_TIMEOUT=${CLEAN_CANDIDATE_WALL_TIMEOUT:-120}
 CLEAN_CANDIDATE_DDAR_WORKERS=${CLEAN_CANDIDATE_DDAR_WORKERS:-8}
 CLEAN_CANDIDATE_BEAM_SCORE=${CLEAN_CANDIDATE_BEAM_SCORE:-rerank_score}
 CLEAN_CANDIDATE_DECODE_BEAM_LIMIT=${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT:-16}
-CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v18_front12_beamscore_rerank_decbeam${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT}_depth24_t200_w120_nrs48_qm3_timeoutfb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}_v1}
+CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front12_v18coverage_beamscore_rerank_decbeam${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT}_depth24_t200_w120_nrs48_qm3_timeoutfb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}_v1}
 
 STAGE4_SIGNAL_MIN_PROGRESS_DELTA=${STAGE4_SIGNAL_MIN_PROGRESS_DELTA:-80}
 STAGE4_SIGNAL_MAX_ELAPSED_SEC=${STAGE4_SIGNAL_MAX_ELAPSED_SEC:-90}
@@ -140,6 +141,15 @@ if [ ! -s "$VALUE_MODEL" ]; then
   echo "missing VALUE_MODEL for post-v12 clean rerun: $VALUE_MODEL" | tee -a "$QUEUE_LOG" >&2
   exit 1
 fi
+if [ "$CLEAN_CANDIDATE_RERANK" = "value_model_frontfill_diverse" ] && [ -n "$CLEAN_SECONDARY_VALUE_MODEL" ] && [ ! -s "$CLEAN_SECONDARY_VALUE_MODEL" ]; then
+  if [ -s "$FALLBACK_SECONDARY_VALUE_MODEL" ]; then
+    log "secondary value model missing, falling back: $FALLBACK_SECONDARY_VALUE_MODEL"
+    CLEAN_SECONDARY_VALUE_MODEL="$FALLBACK_SECONDARY_VALUE_MODEL"
+  else
+    echo "missing CLEAN_SECONDARY_VALUE_MODEL for post-v12 clean rerun: $CLEAN_SECONDARY_VALUE_MODEL" | tee -a "$QUEUE_LOG" >&2
+    exit 1
+  fi
+fi
 
 CLEAN_PROBLEM_NAMES=$(python - "$REFERENCE_SUMMARY_JSONL" "$SCOUT_SUMMARY_JSONL" <<'PY'
 import json
@@ -181,6 +191,7 @@ log "hybrid clean tag: $CLEAN_RERUN_TAG"
 log "hybrid clean timeout beam fallback limit: $CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT"
 log "hybrid clean candidate beam score: $CLEAN_CANDIDATE_BEAM_SCORE"
 log "hybrid clean candidate decode beam limit: $CLEAN_CANDIDATE_DECODE_BEAM_LIMIT"
+log "hybrid clean value models: primary=$VALUE_MODEL; secondary=${CLEAN_SECONDARY_VALUE_MODEL:-none}"
 log "stage4 signal filters: min_delta=${STAGE4_SIGNAL_MIN_PROGRESS_DELTA}; max_elapsed=${STAGE4_SIGNAL_MAX_ELAPSED_SEC}; min_eff=${STAGE4_SIGNAL_MIN_PROGRESS_EFFICIENCY}; per_problem=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_PROBLEM}; per_type=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_TYPE}; solved_repeat=${STAGE4_SIGNAL_SOLVED_REPEAT}"
 
 if [ "$DRY_RUN" = "1" ]; then

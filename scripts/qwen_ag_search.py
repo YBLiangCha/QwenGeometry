@@ -512,13 +512,13 @@ def _preferred_prompt_prefixes(
   return prefixes
 
 
-def candidate_prompt_prefixes(
+def candidate_prompt_prefix_groups(
     strategy: str,
     forbidden_points: set[str] | None,
     preferred_construction_types: list[str] | None = None,
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
   if strategy == 'none':
-    return ['']
+    return [], ['']
   if strategy not in {
       'balanced_constrained',
       'mixed_constructive',
@@ -527,7 +527,7 @@ def candidate_prompt_prefixes(
     raise ValueError(f'unknown candidate prompt sampling strategy: {strategy}')
   new_point = next_free_point_name(forbidden_points or set())
   if not new_point:
-    return ['']
+    return [], ['']
   prefixes = []
   for predicate in _CONSTRAINED_PROMPT_PREFIXES:
     if predicate == '':
@@ -551,7 +551,20 @@ def candidate_prompt_prefixes(
         f'{new_point} = on_dia {new_point} ',
         f'{new_point} = eqdistance {new_point} ',
     ])
-  return _preferred_prompt_prefixes(new_point, preferred_construction_types) + prefixes
+  return _preferred_prompt_prefixes(new_point, preferred_construction_types), prefixes
+
+
+def candidate_prompt_prefixes(
+    strategy: str,
+    forbidden_points: set[str] | None,
+    preferred_construction_types: list[str] | None = None,
+) -> list[str]:
+  preferred_prefixes, base_prefixes = candidate_prompt_prefix_groups(
+      strategy,
+      forbidden_points,
+      preferred_construction_types,
+  )
+  return preferred_prefixes + base_prefixes
 
 
 def normalize_generated_candidate(text: str) -> str:
@@ -2072,17 +2085,32 @@ class QwenGenerator:
     # separates the AG state prompt from the target with a single newline.
     do_sample = temperature > 0
     requested_sequences = max(num_return_sequences, 1) * max(candidate_multiplier, 1)
-    prefixes = candidate_prompt_prefixes(
+    preferred_prefixes, base_prefixes = candidate_prompt_prefix_groups(
         prompt_sampling,
         forbidden_point_names,
         preferred_construction_types,
     )
-    sequences_per_prefix = max(
-        1, (requested_sequences + len(prefixes) - 1) // len(prefixes)
+    base_sequences_per_prefix = max(
+        1, (requested_sequences + len(base_prefixes) - 1) // len(base_prefixes)
     )
+    preferred_budget = max(num_return_sequences, 1) if preferred_prefixes else 0
+    preferred_sequences_per_prefix = (
+        max(
+            1,
+            (preferred_budget + len(preferred_prefixes) - 1)
+            // len(preferred_prefixes),
+        )
+        if preferred_prefixes
+        else 0
+    )
+    prefix_plan = (
+        [(prefix, preferred_sequences_per_prefix) for prefix in preferred_prefixes]
+        + [(prefix, base_sequences_per_prefix) for prefix in base_prefixes]
+    )
+    max_candidates = requested_sequences + preferred_budget
     candidates = []
     seen = set()
-    for prefix in prefixes:
+    for prefix, sequences_per_prefix in prefix_plan:
       model_prompt = prompt.rstrip() + '\n' + prefix
       inputs = self.tokenizer(model_prompt, return_tensors='pt').to(self.device)
       prompt_len = inputs['input_ids'].shape[1]
@@ -2129,7 +2157,7 @@ class QwenGenerator:
         if text and dedup_key not in seen:
           candidates.append((text, 0.0))
           seen.add(dedup_key)
-        if len(candidates) >= requested_sequences:
+        if len(candidates) >= max_candidates:
           return candidates
     return candidates
 

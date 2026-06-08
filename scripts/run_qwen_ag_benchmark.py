@@ -738,6 +738,7 @@ def select_depth_candidates_for_eval(
     type_cap: int,
     tail_slots: int = 0,
     tail_strategy: str = 'even',
+    template_slots: int = 0,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
   """Pick a depth-level eval pool while delaying over-represented types.
 
@@ -799,11 +800,45 @@ def select_depth_candidates_for_eval(
       tail_ids.add(id(record))
       record['_candidate_depth_eval_phase'] = 'tail_rank_coverage'
 
-  primary_limit = max(0, eval_limit - len(tail_selected))
+  template_slots = max(0, min(int(template_slots or 0), eval_limit - len(tail_selected)))
+  template_selected: list[dict[str, Any]] = []
+  template_ids: set[int] = set()
+  if template_slots > 0:
+    template_pool = [
+        record
+        for record in records[eval_limit:]
+        if id(record) not in tail_ids
+        and str(record.get('source', '')).startswith('template')
+    ]
+    seen_template_types: set[str] = set()
+    deferred_template_records: list[dict[str, Any]] = []
+    for record in template_pool:
+      construction_type = qs.construction_type_key(record['translation'])
+      if construction_type in seen_template_types:
+        deferred_template_records.append(record)
+        continue
+      template_selected.append(record)
+      template_ids.add(id(record))
+      seen_template_types.add(construction_type)
+      record['_candidate_depth_eval_phase'] = 'template_source_coverage'
+      if len(template_selected) >= template_slots:
+        break
+    if len(template_selected) < template_slots:
+      for record in deferred_template_records:
+        if id(record) in template_ids:
+          continue
+        template_selected.append(record)
+        template_ids.add(id(record))
+        record['_candidate_depth_eval_phase'] = 'template_source_coverage'
+        if len(template_selected) >= template_slots:
+          break
+
+  reserved_ids = tail_ids | template_ids
+  primary_limit = max(0, eval_limit - len(tail_selected) - len(template_selected))
   if type_cap <= 0:
-    selected = [record for record in records if id(record) not in tail_ids][
+    selected = [record for record in records if id(record) not in reserved_ids][
         :primary_limit
-    ] + tail_selected
+    ] + template_selected + tail_selected
     selected_ids = {id(record) for record in selected}
     for record in selected:
       record.setdefault('_candidate_depth_eval_phase', 'primary')
@@ -818,7 +853,7 @@ def select_depth_candidates_for_eval(
   type_counts: dict[str, int] = {}
   type_delayed_ids: set[int] = set()
   for record in records:
-    if id(record) in tail_ids:
+    if id(record) in reserved_ids:
       continue
     construction_type = qs.construction_type_key(record['translation'])
     count = type_counts.get(construction_type, 0)
@@ -840,6 +875,10 @@ def select_depth_candidates_for_eval(
     record['_candidate_depth_eval_phase'] = 'primary_backfill'
 
   for record in tail_selected:
+    selected.append(record)
+    selected_ids.add(id(record))
+
+  for record in template_selected:
     selected.append(record)
     selected_ids.add(id(record))
 
@@ -1575,6 +1614,7 @@ def solve_one(
           args.candidate_depth_type_eval_cap,
           args.candidate_depth_tail_eval_slots,
           args.candidate_depth_tail_eval_strategy,
+          args.candidate_depth_template_eval_slots,
       )
       for record in pruned_depth_candidates:
         qs.event(
@@ -1605,6 +1645,9 @@ def solve_one(
             candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
             candidate_depth_tail_eval_slots=args.candidate_depth_tail_eval_slots,
             candidate_depth_tail_eval_strategy=args.candidate_depth_tail_eval_strategy,
+            candidate_depth_template_eval_slots=(
+                args.candidate_depth_template_eval_slots
+            ),
             candidate_depth_rank=record.get('_candidate_depth_rank'),
             candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
             source=record.get('source', 'lm'),
@@ -1639,6 +1682,9 @@ def solve_one(
             candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
             candidate_depth_tail_eval_slots=args.candidate_depth_tail_eval_slots,
             candidate_depth_tail_eval_strategy=args.candidate_depth_tail_eval_strategy,
+            candidate_depth_template_eval_slots=(
+                args.candidate_depth_template_eval_slots
+            ),
             candidate_depth_rank=record.get('_candidate_depth_rank'),
             candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
             source=record.get('source', 'lm'),
@@ -2736,6 +2782,16 @@ def parse_args() -> argparse.Namespace:
       help=(
           'tail slot selection strategy: even samples the ranked tail; '
           'near_spread keeps candidates just after the cutoff and spreads the rest'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_depth_template_eval_slots',
+      type=int,
+      default=0,
+      help=(
+          'reserve this many depth-level DDAR eval slots for low-ranked '
+          'template-backfill candidates beyond --candidate_depth_eval_limit; '
+          '0 disables'
       ),
   )
   parser.add_argument(

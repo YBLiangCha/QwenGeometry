@@ -45,6 +45,41 @@ def build_graph_for_symbolic_search(gh: Any, p: Any, definitions: Any):
 _WORKER: dict[str, Any] = {}
 
 
+_CANDIDATE_RERANK_EXTRA_KEY_MAP: tuple[tuple[str, str], ...] = (
+    ('_candidate_frontfill_score', 'candidate_frontfill_score'),
+    ('_candidate_coverage_score', 'candidate_coverage_score'),
+    ('_candidate_signal_anchor_type_bonus', 'candidate_signal_anchor_type_bonus'),
+    (
+        '_candidate_signal_anchor_type_bucket_score',
+        'candidate_signal_anchor_type_bucket_score',
+    ),
+    ('_candidate_progress_type_bonus', 'candidate_progress_type_bonus'),
+    (
+        '_candidate_progress_type_bucket_score',
+        'candidate_progress_type_bucket_score',
+    ),
+)
+_CANDIDATE_RERANK_EXTRA_TASK_KEYS = tuple(
+    event_key for _, event_key in _CANDIDATE_RERANK_EXTRA_KEY_MAP
+)
+
+
+def candidate_rerank_extra_from_record(record: dict[str, Any]) -> dict[str, Any]:
+  return {
+      event_key: record.get(record_key)
+      for record_key, event_key in _CANDIDATE_RERANK_EXTRA_KEY_MAP
+      if record.get(record_key) is not None
+  }
+
+
+def candidate_rerank_extra_from_item(item: dict[str, Any]) -> dict[str, Any]:
+  return {
+      key: item.get(key)
+      for key in _CANDIDATE_RERANK_EXTRA_TASK_KEYS
+      if item.get(key) is not None
+  }
+
+
 class CandidateWallTimeoutError(TimeoutError):
   pass
 
@@ -133,6 +168,7 @@ def run_candidate_ddar_worker(task: dict[str, Any]) -> dict[str, Any]:
         'wall_timeout': task.get('wall_timeout'),
         'candidate_rerank_score': task.get('candidate_rerank_score'),
         'candidate_rerank_phase': task.get('candidate_rerank_phase'),
+        **candidate_rerank_extra_from_item(task),
         'candidate_source': task.get('candidate_source'),
         'candidate_construction_type': task.get('candidate_construction_type'),
         'levels': len(level_times),
@@ -195,6 +231,12 @@ def make_candidate_task(
     candidate_construction_type: str | None = None,
     candidate_depth_rank: int | None = None,
     candidate_depth_eval_phase: str | None = None,
+    candidate_frontfill_score: float | None = None,
+    candidate_coverage_score: float | None = None,
+    candidate_signal_anchor_type_bonus: float | None = None,
+    candidate_signal_anchor_type_bucket_score: float | None = None,
+    candidate_progress_type_bonus: float | None = None,
+    candidate_progress_type_bucket_score: float | None = None,
     parent_fact_context: list[str] | None = None,
 ) -> dict[str, Any]:
   raw_text = raw.strip()
@@ -229,6 +271,14 @@ def make_candidate_task(
       'candidate_construction_type': candidate_construction_type,
       'candidate_depth_rank': candidate_depth_rank,
       'candidate_depth_eval_phase': candidate_depth_eval_phase,
+      'candidate_frontfill_score': candidate_frontfill_score,
+      'candidate_coverage_score': candidate_coverage_score,
+      'candidate_signal_anchor_type_bonus': candidate_signal_anchor_type_bonus,
+      'candidate_signal_anchor_type_bucket_score': (
+          candidate_signal_anchor_type_bucket_score
+      ),
+      'candidate_progress_type_bonus': candidate_progress_type_bonus,
+      'candidate_progress_type_bucket_score': candidate_progress_type_bucket_score,
       'parent_fact_context': list(parent_fact_context or []),
       'tag': f'depth{depth}:{raw}',
   }
@@ -329,6 +379,12 @@ def maybe_log_candidate_sft_signal(
     candidate_adaptive_type_failures: int | None = None,
     candidate_adaptive_type_penalty: float | None = None,
     candidate_adaptive_penalty_stage: str | None = None,
+    candidate_frontfill_score: float | None = None,
+    candidate_coverage_score: float | None = None,
+    candidate_signal_anchor_type_bonus: float | None = None,
+    candidate_signal_anchor_type_bucket_score: float | None = None,
+    candidate_progress_type_bonus: float | None = None,
+    candidate_progress_type_bucket_score: float | None = None,
 ) -> None:
   if not args.log_candidate_sft_signals or not prompt:
     return
@@ -381,6 +437,14 @@ def maybe_log_candidate_sft_signal(
       candidate_adaptive_type_failures=candidate_adaptive_type_failures,
       candidate_adaptive_type_penalty=candidate_adaptive_type_penalty,
       candidate_adaptive_penalty_stage=candidate_adaptive_penalty_stage,
+      candidate_frontfill_score=candidate_frontfill_score,
+      candidate_coverage_score=candidate_coverage_score,
+      candidate_signal_anchor_type_bonus=candidate_signal_anchor_type_bonus,
+      candidate_signal_anchor_type_bucket_score=(
+          candidate_signal_anchor_type_bucket_score
+      ),
+      candidate_progress_type_bonus=candidate_progress_type_bonus,
+      candidate_progress_type_bucket_score=candidate_progress_type_bucket_score,
   )
 
 
@@ -1052,6 +1116,7 @@ def maybe_add_timeout_beam_fallback(
         error=item.get('error'),
         candidate_rerank_score=item.get('candidate_rerank_score'),
         candidate_rerank_phase=item.get('candidate_rerank_phase'),
+        **candidate_rerank_extra_from_item(item),
         candidate_source=item.get('candidate_source'),
         candidate_construction_type=item.get('candidate_construction_type'),
         candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1405,6 +1470,7 @@ def solve_one(
                 candidate_adaptive_penalty_stage=record.get(
                     '_candidate_adaptive_penalty_stage'
                 ),
+                **candidate_rerank_extra_from_record(record),
                 candidate_construction_type=qs.construction_type_key(
                     record['translation']
                 ),
@@ -1467,6 +1533,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=record.get(
                 '_candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_record(record),
             candidate_construction_type=qs.construction_type_key(
                 record['translation']
             ),
@@ -1502,6 +1569,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=record.get(
                 '_candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_record(record),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_depth_eval_limit=args.candidate_depth_eval_limit,
             candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
@@ -1545,6 +1613,7 @@ def solve_one(
               candidate_construction_type=qs.construction_type_key(translation),
               candidate_depth_rank=record.get('_candidate_depth_rank'),
               candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
+              **candidate_rerank_extra_from_record(record),
               parent_fact_context=record.get('parent_fact_context'),
           ))
           parallel_tasks[-1]['prev_score'] = record['prev_score']
@@ -1592,6 +1661,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=record.get(
                 '_candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_record(record),
         )
         if result['solved']:
           qs.event(
@@ -1613,6 +1683,7 @@ def solve_one(
               candidate_adaptive_penalty_stage=record.get(
                   '_candidate_adaptive_penalty_stage'
               ),
+              **candidate_rerank_extra_from_record(record),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
           )
@@ -1690,6 +1761,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=record.get(
                 '_candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_record(record),
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -1717,6 +1789,7 @@ def solve_one(
               candidate_adaptive_penalty_stage=item.get(
                   'candidate_adaptive_penalty_stage'
               ),
+              **candidate_rerank_extra_from_item(item),
               candidate_source=item.get('candidate_source'),
               candidate_construction_type=item.get('candidate_construction_type'),
               candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1758,6 +1831,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=item.get(
                 'candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_item(item),
         )
         if result['solved']:
           qs.event(
@@ -1779,6 +1853,7 @@ def solve_one(
               candidate_adaptive_penalty_stage=item.get(
                   'candidate_adaptive_penalty_stage'
               ),
+              **candidate_rerank_extra_from_item(item),
               candidate_source=item.get('candidate_source') or 'lm',
               candidate_construction_type=item.get('candidate_construction_type'),
           )
@@ -1856,6 +1931,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=item.get(
                 'candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_item(item),
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -2054,6 +2130,7 @@ def solve_one(
               candidate_adaptive_penalty_stage=record.get(
                   '_candidate_adaptive_penalty_stage'
               ),
+              **candidate_rerank_extra_from_record(record),
               candidate_construction_type=qs.construction_type_key(
                   record['translation']
               ),
@@ -2099,6 +2176,7 @@ def solve_one(
               candidate_construction_type=qs.construction_type_key(translation),
               candidate_depth_rank=record.get('_candidate_depth_rank'),
               candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
+              **candidate_rerank_extra_from_record(record),
               parent_fact_context=parent_fact_context,
           ))
           parallel_tasks[-1]['prev_score'] = prev_score
@@ -2146,6 +2224,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=record.get(
                 '_candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_record(record),
         )
         if result['solved']:
           qs.event(
@@ -2167,6 +2246,7 @@ def solve_one(
               candidate_adaptive_penalty_stage=record.get(
                   '_candidate_adaptive_penalty_stage'
               ),
+              **candidate_rerank_extra_from_record(record),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
           )
@@ -2244,6 +2324,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=record.get(
                 '_candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_record(record),
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -2271,6 +2352,7 @@ def solve_one(
               candidate_adaptive_penalty_stage=item.get(
                   'candidate_adaptive_penalty_stage'
               ),
+              **candidate_rerank_extra_from_item(item),
               candidate_source=item.get('candidate_source'),
               candidate_construction_type=item.get('candidate_construction_type'),
               candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -2312,6 +2394,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=item.get(
                 'candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_item(item),
         )
         if result['solved']:
           qs.event(
@@ -2333,6 +2416,7 @@ def solve_one(
               candidate_adaptive_penalty_stage=item.get(
                   'candidate_adaptive_penalty_stage'
               ),
+              **candidate_rerank_extra_from_item(item),
               candidate_source=item.get('candidate_source') or 'lm',
               candidate_construction_type=item.get('candidate_construction_type'),
           )
@@ -2410,6 +2494,7 @@ def solve_one(
             candidate_adaptive_penalty_stage=item.get(
                 'candidate_adaptive_penalty_stage'
             ),
+            **candidate_rerank_extra_from_item(item),
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_depth_rank=item.get('candidate_depth_rank'),

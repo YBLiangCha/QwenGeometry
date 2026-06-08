@@ -8,7 +8,7 @@ cd "$WORK"
 
 SCRIPT_DIR=${SCRIPT_DIR:-scripts}
 PIPELINE_DIR=${PIPELINE_DIR:-data/synth_cpt_1m_pruned_v2}
-POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v40calibrated_mined_anchor_v1}
+POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v41rerank_diagnostics_v1}
 QUEUE_LOG=${QUEUE_LOG:-outputs/${POSTRUN_TAG}.queue_after_existing.log}
 WAIT_INTERVAL=${WAIT_INTERVAL:-60}
 DRY_RUN=${DRY_RUN:-0}
@@ -46,7 +46,7 @@ CANDIDATE_DYNAMIC_PROGRESS_TYPE_BONUS_MAX=${CANDIDATE_DYNAMIC_PROGRESS_TYPE_BONU
 TRAIN_SCOUT_VALUE_MODEL=${TRAIN_SCOUT_VALUE_MODEL:-1}
 SCOUT_REFRESH_VALUE_ROLE=${SCOUT_REFRESH_VALUE_ROLE:-secondary}
 SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES=${SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES:-1}
-SCOUT_VALUE_TAG=${SCOUT_VALUE_TAG:-v40calibrated_mined_anchor_pairwise_currentref_solvedonly_timeoutfb4_secondary_v1}
+SCOUT_VALUE_TAG=${SCOUT_VALUE_TAG:-v41rerank_diagnostics_pairwise_currentref_solvedonly_timeoutfb4_secondary_v1}
 CLEAN_SECONDARY_VALUE_MODEL=${CLEAN_SECONDARY_VALUE_MODEL:-outputs/candidate_value_model_${SCOUT_VALUE_TAG}/candidate_value_model.json}
 
 mkdir -p "$(dirname "$QUEUE_LOG")"
@@ -95,14 +95,14 @@ sys.exit(1)
 PY
 }
 
-log "queue v40calibrated_mined_anchor after existing Qwen pipelines"
+log "queue v41rerank_diagnostics after existing Qwen pipelines"
 log "blocking pattern: $BLOCKING_PATTERN"
 while process_active >> "$QUEUE_LOG" 2>&1; do
   log "blocking Qwen pipeline still active; sleeping ${WAIT_INTERVAL}s"
   sleep "$WAIT_INTERVAL"
 done
 
-log "no blocking Qwen pipeline active; launching v40calibrated_mined_anchor scout and hybrid wrapper"
+log "no blocking Qwen pipeline active; launching v41rerank_diagnostics scout and hybrid wrapper"
 log "tail slots: scout=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}/${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY}; clean=${CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}/${CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY}; clean_depth_eval=${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}"
 log "adaptive type penalty: scout=${SCOUT_CANDIDATE_ADAPTIVE_TYPE_PENALTY}; clean=${CLEAN_CANDIDATE_ADAPTIVE_TYPE_PENALTY}; threshold=${CANDIDATE_ADAPTIVE_TYPE_PENALTY_THRESHOLD}; weight=${CANDIDATE_ADAPTIVE_TYPE_PENALTY_WEIGHT}; max=${CANDIDATE_ADAPTIVE_TYPE_PENALTY_MAX}; reasons=${CANDIDATE_ADAPTIVE_TYPE_PENALTY_REASONS}"
 log "dynamic progress type anchor: enabled=${CANDIDATE_DYNAMIC_PROGRESS_TYPE_ANCHOR}; min_delta=${CANDIDATE_DYNAMIC_PROGRESS_TYPE_MIN_DELTA}; floor=${CANDIDATE_DYNAMIC_PROGRESS_TYPE_MIN_DELTA_FLOOR}; ratio=${CANDIDATE_DYNAMIC_PROGRESS_TYPE_MIN_ROOT_RATIO}; base=${CANDIDATE_DYNAMIC_PROGRESS_TYPE_BONUS_BASE}; weight=${CANDIDATE_DYNAMIC_PROGRESS_TYPE_BONUS_WEIGHT}; max=${CANDIDATE_DYNAMIC_PROGRESS_TYPE_BONUS_MAX}"

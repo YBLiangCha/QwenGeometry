@@ -82,7 +82,40 @@ def parse_args() -> argparse.Namespace:
       default=120.0,
       help='maximum elapsed seconds for progress rows; <=0 disables',
   )
+  parser.add_argument(
+      '--min_progress_efficiency',
+      type=float,
+      default=0.0,
+      help='minimum progress_delta_dependencies / elapsed_sec for progress rows',
+  )
+  parser.add_argument(
+      '--max_progress_rows_per_problem',
+      type=int,
+      default=0,
+      help='cap DDAR-progress rows per problem after ranking by efficiency; 0 disables',
+  )
+  parser.add_argument(
+      '--max_progress_rows_per_type',
+      type=int,
+      default=0,
+      help='cap DDAR-progress rows per construction type after ranking; 0 disables',
+  )
+  parser.add_argument(
+      '--solved_repeat',
+      type=int,
+      default=1,
+      help='duplicate solved rows this many times before the train/eval split',
+  )
   return parser.parse_args()
+
+
+def numeric(value: Any, default: float = 0.0) -> float:
+  if isinstance(value, (int, float)):
+    return float(value)
+  try:
+    return float(value)
+  except (TypeError, ValueError):
+    return default
 
 
 def keep_event(event: dict[str, Any], args: argparse.Namespace) -> bool:
@@ -91,12 +124,16 @@ def keep_event(event: dict[str, Any], args: argparse.Namespace) -> bool:
     return True
   if reason != 'ddar_progress_positive' or not args.include_progress:
     return False
-  delta = int(event.get('progress_delta_dependencies') or 0)
+  delta = numeric(event.get('progress_delta_dependencies'))
   elapsed = event.get('candidate_elapsed_sec')
   if delta < args.min_progress_delta:
     return False
   if args.max_elapsed_sec > 0:
     if not isinstance(elapsed, (int, float)) or elapsed > args.max_elapsed_sec:
+      return False
+  if args.min_progress_efficiency > 0:
+    elapsed_sec = numeric(elapsed, default=0.0)
+    if elapsed_sec <= 0 or delta / max(elapsed_sec, 1.0) < args.min_progress_efficiency:
       return False
   return True
 
@@ -124,6 +161,49 @@ def row_from_event(event: dict[str, Any], path: Path, line_no: int) -> dict[str,
       'candidate_ddar_status': event.get('candidate_ddar_status'),
       'candidate_solved': event.get('candidate_solved'),
   }
+
+
+def progress_rank_key(row: dict[str, Any]) -> tuple[float, float, float, float]:
+  delta = numeric(row.get('progress_delta_dependencies'))
+  elapsed = numeric(row.get('candidate_elapsed_sec'), default=0.0)
+  efficiency = delta / max(elapsed, 1.0) if elapsed >= 0 else 0.0
+  rerank_score = numeric(row.get('candidate_rerank_score'))
+  # Rank efficient, high-delta progress first; slow fact growth is noisy.
+  return (efficiency, delta, rerank_score, -elapsed)
+
+
+def select_rows(rows: list[dict[str, Any]], args: argparse.Namespace) -> list[dict[str, Any]]:
+  solved_rows = [row for row in rows if row.get('verdict') == 'candidate_solved']
+  progress_rows = [row for row in rows if row.get('verdict') != 'candidate_solved']
+  selected: list[dict[str, Any]] = []
+
+  solved_repeat = max(1, args.solved_repeat)
+  for row in solved_rows:
+    for repeat_index in range(solved_repeat):
+      repeated = dict(row)
+      if repeat_index:
+        repeated['id'] = f"{row['id']}::solved_repeat{repeat_index}"
+      selected.append(repeated)
+
+  progress_by_problem: dict[str, int] = {}
+  progress_by_type: dict[str, int] = {}
+  for row in sorted(progress_rows, key=progress_rank_key, reverse=True):
+    problem = str(row.get('source_problem') or '')
+    construction_type = str(row.get('candidate_construction_type') or 'unknown')
+    if (
+        args.max_progress_rows_per_problem > 0
+        and progress_by_problem.get(problem, 0) >= args.max_progress_rows_per_problem
+    ):
+      continue
+    if (
+        args.max_progress_rows_per_type > 0
+        and progress_by_type.get(construction_type, 0) >= args.max_progress_rows_per_type
+    ):
+      continue
+    selected.append(row)
+    progress_by_problem[problem] = progress_by_problem.get(problem, 0) + 1
+    progress_by_type[construction_type] = progress_by_type.get(construction_type, 0) + 1
+  return selected
 
 
 def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -159,8 +239,14 @@ def main() -> None:
       counts['duplicate_prompt_target'] = counts.get('duplicate_prompt_target', 0) + 1
       continue
     seen.add(key)
-    row['split'] = split_for_problem(row['source_problem'], args.eval_mod)
     rows.append(row)
+    counts[f"kept_before_cap:{row['verdict']}"] = (
+        counts.get(f"kept_before_cap:{row['verdict']}", 0) + 1
+    )
+  rows_before_cap = len(rows)
+  rows = select_rows(rows, args)
+  for row in rows:
+    row['split'] = split_for_problem(row['source_problem'], args.eval_mod)
     counts[row['verdict']] = counts.get(row['verdict'], 0) + 1
     counts[row['split']] = counts.get(row['split'], 0) + 1
   train_rows = [row for row in rows if row['split'] == 'train']
@@ -175,9 +261,19 @@ def main() -> None:
       'train_file': str(train_file),
       'eval_file': str(eval_file),
       'rows': len(rows),
+      'rows_before_cap': rows_before_cap,
       'train_rows': len(train_rows),
       'eval_rows': len(eval_rows),
       'counts': counts,
+      'filters': {
+          'include_progress': args.include_progress,
+          'min_progress_delta': args.min_progress_delta,
+          'max_elapsed_sec': args.max_elapsed_sec,
+          'min_progress_efficiency': args.min_progress_efficiency,
+          'max_progress_rows_per_problem': args.max_progress_rows_per_problem,
+          'max_progress_rows_per_type': args.max_progress_rows_per_type,
+          'solved_repeat': max(1, args.solved_repeat),
+      },
   }
   summary_file.parent.mkdir(parents=True, exist_ok=True)
   summary_file.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding='utf-8')

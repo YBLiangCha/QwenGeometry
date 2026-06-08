@@ -61,6 +61,7 @@ CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT=${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT:-0}
 CLEAN_CANDIDATE_DDAR_TIMEOUT=${CLEAN_CANDIDATE_DDAR_TIMEOUT:-240}
 CLEAN_CANDIDATE_WALL_TIMEOUT=${CLEAN_CANDIDATE_WALL_TIMEOUT:-150}
 CLEAN_CANDIDATE_DDAR_WORKERS=${CLEAN_CANDIDATE_DDAR_WORKERS:-8}
+CLEAN_CANDIDATE_BEAM_SCORE=${CLEAN_CANDIDATE_BEAM_SCORE:-lm_score}
 CLEAN_BEAM_SIZE=${CLEAN_BEAM_SIZE:-64}
 CLEAN_SEARCH_DEPTH=${CLEAN_SEARCH_DEPTH:-4}
 CLEAN_NUM_RETURN_SEQUENCES=${CLEAN_NUM_RETURN_SEQUENCES:-48}
@@ -271,7 +272,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     )
   fi
   log "starting clean rerun: $CLEAN_RERUN_TAG"
-  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; timeout beam fallback: ${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}; rerank: ${CLEAN_CANDIDATE_RERANK}; frontfill: ${CLEAN_FRONTFILL_LIMIT}; value model: ${VALUE_MODEL}; secondary value model: ${CLEAN_SECONDARY_VALUE_MODEL:-none}"
+  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; timeout beam fallback: ${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam score: ${CLEAN_CANDIDATE_BEAM_SCORE}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}; rerank: ${CLEAN_CANDIDATE_RERANK}; frontfill: ${CLEAN_FRONTFILL_LIMIT}; value model: ${VALUE_MODEL}; secondary value model: ${CLEAN_SECONDARY_VALUE_MODEL:-none}"
   log "clean rerun problem names: ${CLEAN_PROBLEM_NAMES}"
   xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchmark.py" \
     --script_dir "$SCRIPT_DIR" \
@@ -311,6 +312,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --candidate_rerank "$CLEAN_CANDIDATE_RERANK" \
     --candidate_value_model "$VALUE_MODEL" \
     "${CLEAN_SECONDARY_VALUE_MODEL_ARGS[@]}" \
+    --candidate_beam_score "$CLEAN_CANDIDATE_BEAM_SCORE" \
     --candidate_ddar_workers "$CLEAN_CANDIDATE_DDAR_WORKERS" \
     --lm_fact_context_top_k 8 \
     >> "outputs/${CLEAN_RERUN_TAG}.log" 2>&1

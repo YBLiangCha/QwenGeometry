@@ -543,7 +543,12 @@ def maybe_add_timeout_beam_fallback(
             prompt,
             item['p_new_txt'],
         ),
-        item.get('prev_score', 0.0) + item.get('lm_score', 0.0),
+        candidate_beam_score(
+            item.get('prev_score', 0.0),
+            item.get('lm_score', 0.0),
+            item.get('candidate_rerank_score'),
+            args,
+        ),
     )
     qs.event(
         events_file,
@@ -559,6 +564,25 @@ def maybe_add_timeout_beam_fallback(
         fallback_limit=limit,
         elapsed_sec=item.get('elapsed_sec'),
     )
+
+
+def candidate_beam_score(
+    prev_score: float,
+    lm_score: float,
+    candidate_rerank_score: float | None,
+    args: argparse.Namespace,
+) -> float:
+  strategy = getattr(args, 'candidate_beam_score', 'lm_score')
+  rerank_score = (
+      float(candidate_rerank_score)
+      if isinstance(candidate_rerank_score, (int, float))
+      else 0.0
+  )
+  if strategy == 'rerank_score':
+    return prev_score + rerank_score
+  if strategy == 'lm_plus_rerank':
+    return prev_score + lm_score + rerank_score
+  return prev_score + lm_score
 
 
 def solve_one(
@@ -875,7 +899,12 @@ def solve_one(
                 else prompt_next,
                 p_new_txt,
             ),
-            record['prev_score'] + lm_score,
+            candidate_beam_score(
+                record['prev_score'],
+                lm_score,
+                record.get('_candidate_rerank_score'),
+                args,
+            ),
         )
       timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
@@ -942,7 +971,12 @@ def solve_one(
                 else item['prompt_next'],
                 item['p_new_txt'],
             ),
-            item['prev_score'] + item['lm_score'],
+            candidate_beam_score(
+                item['prev_score'],
+                item['lm_score'],
+                item.get('candidate_rerank_score'),
+                args,
+            ),
         )
       maybe_add_timeout_beam_fallback(
           qs,
@@ -1181,7 +1215,12 @@ def solve_one(
                 else prompt_next,
                 p_new_txt,
             ),
-            prev_score + lm_score,
+            candidate_beam_score(
+                prev_score,
+                lm_score,
+                record.get('_candidate_rerank_score'),
+                args,
+            ),
         )
       timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
@@ -1248,7 +1287,12 @@ def solve_one(
                 else item['prompt_next'],
                 item['p_new_txt'],
             ),
-            item['prev_score'] + item['lm_score'],
+            candidate_beam_score(
+                item['prev_score'],
+                item['lm_score'],
+                item.get('candidate_rerank_score'),
+                args,
+            ),
         )
       maybe_add_timeout_beam_fallback(
           qs,
@@ -1399,6 +1443,12 @@ def parse_args() -> argparse.Namespace:
       type=int,
       default=8,
       help='front slots filled by --candidate_value_model in frontfill rerank',
+  )
+  parser.add_argument(
+      '--candidate_beam_score',
+      choices=['lm_score', 'rerank_score', 'lm_plus_rerank'],
+      default='lm_score',
+      help='score used to keep/order candidate states in the next search beam',
   )
   parser.add_argument(
       '--candidate_ddar_workers',

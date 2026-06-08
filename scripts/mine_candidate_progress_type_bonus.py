@@ -18,6 +18,8 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument('--events_dir', required=True)
   parser.add_argument('--out', required=True)
   parser.add_argument('--min_delta', type=float, default=50.0)
+  parser.add_argument('--min_delta_floor', type=float, default=0.0)
+  parser.add_argument('--min_root_ratio', type=float, default=0.0)
   parser.add_argument('--max_elapsed_sec', type=float, default=0.0)
   parser.add_argument('--min_efficiency', type=float, default=0.0)
   parser.add_argument('--topn', type=int, default=64)
@@ -25,6 +27,8 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument('--delta_weight', type=float, default=0.9)
   parser.add_argument('--repeat_weight', type=float, default=0.15)
   parser.add_argument('--repeat_bonus_cap', type=float, default=0.4)
+  parser.add_argument('--ratio_weight', type=float, default=0.0)
+  parser.add_argument('--ratio_bonus_cap', type=float, default=0.0)
   parser.add_argument('--solved_bonus', type=float, default=0.8)
   parser.add_argument('--max_bonus', type=float, default=3.4)
   parser.add_argument(
@@ -95,8 +99,6 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
       if delta <= 0:
         continue
       is_solved = status == 'solved'
-      if not is_solved and delta < args.min_delta:
-        continue
       elapsed = event.get('elapsed_sec')
       try:
         elapsed_value = float(elapsed) if elapsed is not None else 0.0
@@ -115,6 +117,14 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
           and not is_solved
       ):
         continue
+      root_ratio = delta / root_added if root_added > 0 else 0.0
+      ratio_pass = (
+          args.min_root_ratio > 0
+          and delta >= args.min_delta_floor
+          and root_ratio >= args.min_root_ratio
+      )
+      if not is_solved and delta < args.min_delta and not ratio_pass:
+        continue
       item = by_type.setdefault(
           typ,
           {
@@ -122,11 +132,13 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
               'solved_count': 0,
               'problems': set(),
               'max_delta': float('-inf'),
+              'max_root_ratio': 0.0,
           },
       )
       item['count'] += 1
       item['solved_count'] += int(is_solved)
       item['problems'].add(problem)
+      item['max_root_ratio'] = max(item['max_root_ratio'], root_ratio)
       problem_counts[problem] += 1
       update_best(item, event, delta)
 
@@ -137,10 +149,15 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
         args.repeat_bonus_cap,
         args.repeat_weight * math.log1p(max(0, item['count'] - 1)),
     )
+    ratio_bonus = min(
+        args.ratio_bonus_cap,
+        args.ratio_weight * math.log1p(max(0.0, item.get('max_root_ratio', 0.0))),
+    )
     bonus = (
         args.base_bonus
         + args.delta_weight * math.log1p(max(0.0, item['max_delta']) / min_delta)
         + repeat_bonus
+        + ratio_bonus
         + (args.solved_bonus if item['solved_count'] else 0.0)
     )
     if args.max_bonus > 0:
@@ -153,6 +170,8 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
         'problem_count': len(item['problems']),
         'problems': sorted(item['problems']),
         'max_delta': item['max_delta'],
+        'max_root_ratio': round(item.get('max_root_ratio', 0.0), 4),
+        'ratio_bonus': round(ratio_bonus, 4),
         'best_added_dependencies': item.get('best_added_dependencies'),
         'best_elapsed_sec': item.get('best_elapsed_sec'),
         'best_status': item.get('best_status'),
@@ -176,6 +195,8 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
           'events_dir': args.events_dir,
           'event_files': len(event_files),
           'min_delta': args.min_delta,
+          'min_delta_floor': args.min_delta_floor,
+          'min_root_ratio': args.min_root_ratio,
           'max_elapsed_sec': args.max_elapsed_sec,
           'min_efficiency': args.min_efficiency,
           'topn': args.topn,
@@ -183,6 +204,8 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
           'delta_weight': args.delta_weight,
           'repeat_weight': args.repeat_weight,
           'repeat_bonus_cap': args.repeat_bonus_cap,
+          'ratio_weight': args.ratio_weight,
+          'ratio_bonus_cap': args.ratio_bonus_cap,
           'solved_bonus': args.solved_bonus,
           'max_bonus': args.max_bonus,
           'statuses': sorted(statuses),

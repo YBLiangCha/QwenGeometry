@@ -1072,6 +1072,12 @@ changes. Tags are the practical version identifiers for this workspace.
   - `unsolved_v23near_stage4_d24_tc6_tail...`
 - Analysis/report scripts now aggregate selected tail strategies so future
   solved cases can be attributed to the actual tail policy.
+- Operational queue note: two stale adaptive waiters from
+  `/tmp/qwen_ag_scripts_postv12_adaptive_progress_coverage_v1` were still
+  sleeping behind the current reference run and would have launched before the
+  newer v23near queue.  They were terminated while they only had `sleep 300`
+  child processes, leaving the current reference run and the version-managed
+  v23near queue intact.
 
 ## Versioning Rule
 

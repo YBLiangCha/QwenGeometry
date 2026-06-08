@@ -547,6 +547,7 @@ def select_depth_candidates_for_eval(
 def post_canonical_template_backfill(
     qs: Any,
     events_file: str,
+    problem_name: str,
     depth: int,
     prompt: str,
     translated_candidates: list[dict[str, Any]],
@@ -604,6 +605,7 @@ def post_canonical_template_backfill(
         'raw': raw,
         'lm_score': 0.0,
         'translation': translation,
+        'problem': problem_name,
         'source': 'template_post_canonical_backfill',
     })
     if len(translated_candidates) >= target_count:
@@ -1078,12 +1080,14 @@ def solve_one(
               'raw': raw,
               'lm_score': lm_score,
               'translation': translation,
+              'problem': p.url,
               'source': source,
           })
         if args.candidate_template_backfill:
           post_canonical_template_backfill(
               qs,
               events_file,
+              p.url,
               depth,
               prompt,
               translated_candidates,
@@ -1556,12 +1560,14 @@ def solve_one(
             'raw': raw,
             'lm_score': lm_score,
             'translation': translation,
+            'problem': p.url,
             'source': source,
         })
       if args.candidate_template_backfill:
         post_canonical_template_backfill(
             qs,
             events_file,
+            p.url,
             depth,
             prompt,
             translated_candidates,

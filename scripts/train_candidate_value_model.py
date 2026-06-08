@@ -45,6 +45,20 @@ def add_prefixed_token(tokens: list[str], prefix: str, value: Any) -> None:
     tokens.append(f'{prefix}={normalized}')
 
 
+def add_problem_type_tokens(
+    tokens: list[str], problem: Any, construction_type: str
+) -> None:
+  problem_key = normalize_feature(problem)
+  type_key = normalize_feature(construction_type)
+  if problem_key == 'none' or type_key == 'none':
+    return
+  tokens.append(f'problem_type_combo={problem_key}__{type_key}')
+  for name in construction_type.split('+'):
+    name_key = normalize_feature(name)
+    if name_key != 'none' and name_key != 'unknown':
+      tokens.append(f'problem_type={problem_key}__{name_key}')
+
+
 def tokens_for_row(
     row: dict[str, Any], include_posthoc_features: bool = False
 ) -> list[str]:
@@ -63,6 +77,7 @@ def tokens_for_row(
     if name and name != 'unknown':
       tokens.append('type=' + name)
   add_prefixed_token(tokens, 'type_combo', construction_type)
+  add_problem_type_tokens(tokens, row.get('problem'), construction_type)
   error = classify_error(translation)
   if include_posthoc_features and error == 'not_error':
     error = classify_error(str(row.get('candidate_ddar_error') or ''))

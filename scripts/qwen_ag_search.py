@@ -1344,6 +1344,20 @@ def add_candidate_value_feature(
     tokens.append(f'{prefix}={normalized}')
 
 
+def add_candidate_problem_type_features(
+    tokens: list[str], problem: Any, type_key: str
+) -> None:
+  problem_key = normalize_candidate_value_feature(problem)
+  combo_key = normalize_candidate_value_feature(type_key)
+  if problem_key == 'none' or combo_key == 'none':
+    return
+  tokens.append(f'problem_type_combo={problem_key}__{combo_key}')
+  for name in type_key.split('+'):
+    name_key = normalize_candidate_value_feature(name)
+    if name_key != 'none' and name_key != 'unknown':
+      tokens.append(f'problem_type={problem_key}__{name_key}')
+
+
 def _candidate_value_tokens(record: dict[str, Any]) -> list[str]:
   raw = str(record.get('raw') or '')
   translation = str(record.get('translation') or '')
@@ -1363,6 +1377,9 @@ def _candidate_value_tokens(record: dict[str, Any]) -> list[str]:
     if name and name != 'unknown':
       tokens.append('type=' + name)
   add_candidate_value_feature(tokens, 'type_combo', type_key)
+  add_candidate_problem_type_features(
+      tokens, record.get('problem') or record.get('problem_name'), type_key
+  )
   error = candidate_value_error_key(translation)
   add_candidate_value_feature(tokens, 'error', error)
   add_candidate_value_feature(tokens, 'source', record.get('source'))
@@ -2067,6 +2084,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
               'raw': raw,
               'lm_score': lm_score,
               'translation': translation,
+              'problem': args.problem_name,
               'source': source,
           })
         ranked_node_candidates = rerank_candidate_records(
@@ -2253,6 +2271,7 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
             'raw': raw,
             'lm_score': lm_score,
             'translation': translation,
+            'problem': args.problem_name,
             'source': source,
         })
       ranked_candidates = rerank_candidate_records(

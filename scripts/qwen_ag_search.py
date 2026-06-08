@@ -143,6 +143,22 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     'on_tline': 1.0,
     'on_aline': 0.9,
 }
+_SIGNAL_ANCHOR_TYPE_BONUS = {
+    # Stronger anchor slots for construction families that have already solved
+    # or repeatedly produced DDAR-positive signals in the current online loop.
+    # They run before the broader progress coverage phase so narrow depth eval
+    # budgets keep at least a few proven families alive.
+    'on_line+on_tline': 6.0,
+    'on_bline+on_line': 6.0,
+    'on_line+on_line': 5.5,
+    'on_line+on_circle': 4.5,
+    'on_circum': 4.0,
+    'on_circle': 3.5,
+    'eqangle3': 3.2,
+    'on_bline': 3.0,
+    'on_dia': 2.8,
+    'on_aline': 2.5,
+}
 _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG = (
     set(_CONSTRUCTIVE_ARG_ARITY) - {'eqangle3'}
 )
@@ -1082,11 +1098,13 @@ def interleave_ranked_records_by_node(
   return interleaved + missing_node
 
 
-def progress_type_coverage_records(
+def type_signal_coverage_records(
     records: list[dict[str, Any]],
+    type_bonus: dict[str, float],
+    bonus_field: str,
+    bucket_score_field: str,
 ) -> list[dict[str, Any]]:
-  """Order candidates from progress-positive construction families."""
-
+  """Order candidates from construction families with external signal."""
   def frontfill_score(record: dict[str, Any]) -> float:
     try:
       return float(record.get('_candidate_frontfill_score', 0.0))
@@ -1097,13 +1115,13 @@ def progress_type_coverage_records(
   bucket_scores: dict[str, float] = {}
   for record in records:
     key = construction_type_key(record['translation'])
-    type_bonus = _PROGRESS_SIGNAL_TYPE_BONUS.get(key)
-    if type_bonus is None:
+    bonus = type_bonus.get(key)
+    if bonus is None:
       continue
     buckets.setdefault(key, []).append(record)
     bucket_scores[key] = max(
         bucket_scores.get(key, float('-inf')),
-        frontfill_score(record) + type_bonus,
+        frontfill_score(record) + bonus,
     )
   for bucket in buckets.values():
     bucket.sort(
@@ -1114,7 +1132,7 @@ def progress_type_coverage_records(
       buckets,
       key=lambda key: (
           -bucket_scores[key],
-          -_PROGRESS_SIGNAL_TYPE_BONUS[key],
+          -type_bonus[key],
           key,
       ),
   )
@@ -1125,13 +1143,37 @@ def progress_type_coverage_records(
     for key in ordered_keys:
       if buckets[key]:
         record = buckets[key].pop(0)
-        record['_candidate_progress_type_bonus'] = _PROGRESS_SIGNAL_TYPE_BONUS[key]
-        record['_candidate_progress_type_bucket_score'] = bucket_scores[key]
+        record[bonus_field] = type_bonus[key]
+        record[bucket_score_field] = bucket_scores[key]
         reranked.append(record)
         progressed = True
     if not progressed:
       break
   return interleave_ranked_records_by_node(reranked)
+
+
+def progress_type_coverage_records(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+  """Order candidates from progress-positive construction families."""
+  return type_signal_coverage_records(
+      records,
+      _PROGRESS_SIGNAL_TYPE_BONUS,
+      '_candidate_progress_type_bonus',
+      '_candidate_progress_type_bucket_score',
+  )
+
+
+def signal_anchor_coverage_records(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+  """Order candidates from solved/SFT-positive construction families."""
+  return type_signal_coverage_records(
+      records,
+      _SIGNAL_ANCHOR_TYPE_BONUS,
+      '_candidate_signal_anchor_type_bonus',
+      '_candidate_signal_anchor_type_bucket_score',
+  )
 
 
 def rerank_candidate_records(
@@ -1188,6 +1230,13 @@ def rerank_candidate_records(
       record['_candidate_rerank_score'] = record.get('_candidate_frontfill_score')
       record['_candidate_rerank_phase'] = 'frontfill'
     if strategy == 'value_model_frontfill_progress_diverse':
+      for record in signal_anchor_coverage_records(records):
+        if id(record) in selected_ids:
+          continue
+        selected.append(record)
+        selected_ids.add(id(record))
+        record['_candidate_rerank_score'] = record.get('_candidate_frontfill_score')
+        record['_candidate_rerank_phase'] = 'signal_anchor_coverage'
       for record in progress_type_coverage_records(records):
         if id(record) in selected_ids:
           continue

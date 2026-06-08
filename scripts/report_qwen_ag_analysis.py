@@ -246,6 +246,11 @@ def render_report(payload: dict[str, Any]) -> str:
           'its slots behind phases with proven DDAR progress.'
       ),
       (
+          '- signal_anchor_coverage is expected to be a small but high-value '
+          'bridge: it should preserve solved/SFT-positive construction families '
+          'without drowning out generic progress_type_coverage.'
+      ),
+      (
           '- Candidate SFT data should continue to emphasize solved candidates '
           'and fast DDAR-progress positives; slow timeout branches should remain '
           'hard negatives unless fallback later solves a problem.'

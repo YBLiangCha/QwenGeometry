@@ -375,6 +375,53 @@ def candidate_unique_backfill_target(args: argparse.Namespace) -> int:
   return max(1, args.num_return_sequences)
 
 
+def select_depth_candidates_for_eval(
+    qs: Any,
+    records: list[dict[str, Any]],
+    eval_limit: int,
+    type_cap: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+  """Pick a depth-level eval pool while delaying over-represented types."""
+  if eval_limit <= 0:
+    return records, []
+  if len(records) <= eval_limit:
+    return records, []
+  if type_cap <= 0:
+    return records[:eval_limit], records[eval_limit:]
+
+  selected: list[dict[str, Any]] = []
+  delayed: list[dict[str, Any]] = []
+  selected_ids: set[int] = set()
+  type_counts: dict[str, int] = {}
+  type_delayed_ids: set[int] = set()
+  for record in records:
+    construction_type = qs.construction_type_key(record['translation'])
+    count = type_counts.get(construction_type, 0)
+    if len(selected) < eval_limit and count < type_cap:
+      selected.append(record)
+      selected_ids.add(id(record))
+      type_counts[construction_type] = count + 1
+    else:
+      delayed.append(record)
+      if count >= type_cap:
+        type_delayed_ids.add(id(record))
+
+  for record in delayed:
+    if len(selected) >= eval_limit:
+      break
+    selected.append(record)
+    selected_ids.add(id(record))
+
+  pruned = []
+  for record in records:
+    if id(record) in selected_ids:
+      continue
+    if id(record) in type_delayed_ids:
+      record['_candidate_depth_prune_reason'] = 'depth_type_cap_pruned'
+    pruned.append(record)
+  return selected, pruned
+
+
 def post_canonical_template_backfill(
     qs: Any,
     events_file: str,
@@ -948,24 +995,31 @@ def solve_one(
           secondary_value_model,
           args.candidate_frontfill_limit,
       )
-      for record in ranked_depth_candidates[args.candidate_depth_eval_limit:]:
+      eval_depth_candidates, pruned_depth_candidates = select_depth_candidates_for_eval(
+          qs,
+          ranked_depth_candidates,
+          args.candidate_depth_eval_limit,
+          args.candidate_depth_type_eval_cap,
+      )
+      for record in pruned_depth_candidates:
         qs.event(
             events_file,
             kind='candidate_filtered',
             depth=depth,
             raw=record['raw'],
             translation=record['translation'],
-            reason='depth_rank_pruned',
+            reason=record.get('_candidate_depth_prune_reason', 'depth_rank_pruned'),
             candidate_rerank=args.candidate_rerank,
             candidate_rerank_score=record.get('_candidate_rerank_score'),
             candidate_construction_type=qs.construction_type_key(
                 record['translation']
             ),
             candidate_depth_eval_limit=args.candidate_depth_eval_limit,
+            candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
             source=record.get('source', 'lm'),
         )
       parallel_tasks = []
-      for record in ranked_depth_candidates[:args.candidate_depth_eval_limit]:
+      for record in eval_depth_candidates:
         raw = record['raw']
         lm_score = record['lm_score']
         translation = record['translation']
@@ -1600,6 +1654,15 @@ def parse_args() -> argparse.Namespace:
       type=int,
       default=0,
       help='evaluate only the top-N reranked valid candidates per search depth; 0 disables',
+  )
+  parser.add_argument(
+      '--candidate_depth_type_eval_cap',
+      type=int,
+      default=0,
+      help=(
+          'delay candidates from a construction type after this many selected '
+          'depth-level eval slots; 0 disables'
+      ),
   )
   parser.add_argument(
       '--candidate_timeout_beam_fallback_limit',

@@ -132,6 +132,13 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     'on_circum+on_circum': 1.5,
     'on_aline+on_circle': 1.5,
     'angle_bisector': 1.4,
+    # Single-construction families are noisy, so keep these below the
+    # progress-positive combos and let the adaptive value score decide.
+    'on_line': 1.2,
+    'on_circum': 1.1,
+    'on_circle': 1.1,
+    'on_tline': 1.0,
+    'on_aline': 0.9,
 }
 _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG = (
     set(_CONSTRUCTIVE_ARG_ARITY) - {'eqangle3'}
@@ -1109,7 +1116,8 @@ def progress_type_coverage_records(
       ),
   )
   reranked: list[dict[str, Any]] = []
-  while len(reranked) < sum(len(bucket) for bucket in buckets.values()):
+  total_records = sum(len(bucket) for bucket in buckets.values())
+  while len(reranked) < total_records:
     progressed = False
     for key in ordered_keys:
       if buckets[key]:

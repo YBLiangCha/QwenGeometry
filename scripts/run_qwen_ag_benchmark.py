@@ -1205,7 +1205,25 @@ def solve_one(
   value_model = getattr(args, '_candidate_value_model', None)
   secondary_value_model = getattr(args, '_candidate_secondary_value_model', None)
   adaptive_type_failures: dict[str, int] = {}
+  static_progress_type_bonuses = getattr(
+      args, '_candidate_static_progress_type_bonus', {}
+  )
   dynamic_progress_type_bonuses: dict[str, float] = {}
+  if static_progress_type_bonuses:
+    qs.event(
+        events_file,
+        kind='candidate_static_progress_type_bonus_loaded',
+        path=args.candidate_static_progress_type_bonus,
+        count=len(static_progress_type_bonuses),
+        top=sorted(
+            static_progress_type_bonuses.items(), key=lambda item: -item[1]
+        )[:12],
+    )
+
+  def type_bonus_context() -> dict[str, float]:
+    return merge_type_bonus_maps(
+        static_progress_type_bonuses, dynamic_progress_type_bonuses
+    )
 
   for depth in range(args.search_depth):
     qs.event(events_file, kind='depth_start', depth=depth, nodes=len(beam))
@@ -1354,7 +1372,7 @@ def solve_one(
             value_model,
             secondary_value_model,
             args.candidate_frontfill_limit,
-            dynamic_progress_type_bonuses,
+            type_bonus_context(),
         )
         ranked_node_candidates = apply_adaptive_type_penalties(
             qs,
@@ -1409,7 +1427,7 @@ def solve_one(
           value_model,
           secondary_value_model,
           args.candidate_frontfill_limit,
-          dynamic_progress_type_bonuses,
+          type_bonus_context(),
       )
       ranked_depth_candidates = apply_adaptive_type_penalties(
           qs,
@@ -2003,7 +2021,7 @@ def solve_one(
           value_model,
           secondary_value_model,
           args.candidate_frontfill_limit,
-          dynamic_progress_type_bonuses,
+          type_bonus_context(),
       )
       ranked_candidates = apply_adaptive_type_penalties(
           qs,
@@ -2418,6 +2436,50 @@ def parse_problem_names(value: str | None) -> set[str] | None:
   return {x.strip() for x in value.split(',') if x.strip()}
 
 
+def load_candidate_static_progress_type_bonus(
+    path: str | None,
+) -> dict[str, float]:
+  if not path:
+    return {}
+  bonus_path = Path(path)
+  if not bonus_path.exists():
+    raise FileNotFoundError(f'candidate static progress type bonus not found: {path}')
+  data = json.loads(bonus_path.read_text(encoding='utf-8-sig'))
+  if isinstance(data, dict) and isinstance(data.get('type_bonus'), dict):
+    data = data['type_bonus']
+  if not isinstance(data, dict):
+    raise ValueError(
+        '--candidate_static_progress_type_bonus must be a JSON object or '
+        'contain a type_bonus object'
+    )
+  parsed: dict[str, float] = {}
+  for key, value in data.items():
+    if not isinstance(key, str):
+      continue
+    try:
+      score = float(value)
+    except (TypeError, ValueError):
+      continue
+    if score > 0.0:
+      parsed[key] = score
+  return parsed
+
+
+def merge_type_bonus_maps(*maps: dict[str, float] | None) -> dict[str, float]:
+  merged: dict[str, float] = {}
+  for mapping in maps:
+    if not mapping:
+      continue
+    for key, value in mapping.items():
+      try:
+        score = float(value)
+      except (TypeError, ValueError):
+        continue
+      if score > merged.get(key, 0.0):
+        merged[key] = score
+  return merged
+
+
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser()
   parser.add_argument('--script_dir', required=True)
@@ -2572,6 +2634,13 @@ def parse_args() -> argparse.Namespace:
       type=float,
       default=3.2,
       help='maximum dynamic progress type coverage bonus; <=0 disables cap',
+  )
+  parser.add_argument(
+      '--candidate_static_progress_type_bonus',
+      help=(
+          'optional JSON object mapping construction-type keys to global '
+          'coverage bonuses mined from prior DDAR-progress traces'
+      ),
   )
   parser.add_argument(
       '--candidate_timeout_beam_fallback_limit',
@@ -2783,6 +2852,11 @@ def main() -> None:
   )
   args._candidate_secondary_value_model = qs.load_candidate_value_model(
       args.candidate_secondary_value_model
+  )
+  args._candidate_static_progress_type_bonus = (
+      load_candidate_static_progress_type_bonus(
+          args.candidate_static_progress_type_bonus
+      )
   )
 
   problems = pr.Problem.from_txt_file(

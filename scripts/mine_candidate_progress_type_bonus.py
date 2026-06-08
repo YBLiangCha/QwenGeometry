@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+"""Mine construction-type coverage bonuses from benchmark event logs."""
+
+from __future__ import annotations
+
+import argparse
+import collections
+import glob
+import json
+import math
+import os
+from pathlib import Path
+from typing import Any
+
+
+def parse_args() -> argparse.Namespace:
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--events_dir', required=True)
+  parser.add_argument('--out', required=True)
+  parser.add_argument('--min_delta', type=float, default=50.0)
+  parser.add_argument('--max_elapsed_sec', type=float, default=0.0)
+  parser.add_argument('--min_efficiency', type=float, default=0.0)
+  parser.add_argument('--topn', type=int, default=64)
+  parser.add_argument('--base_bonus', type=float, default=1.6)
+  parser.add_argument('--delta_weight', type=float, default=0.9)
+  parser.add_argument('--repeat_weight', type=float, default=0.15)
+  parser.add_argument('--repeat_bonus_cap', type=float, default=0.4)
+  parser.add_argument('--solved_bonus', type=float, default=0.8)
+  parser.add_argument('--max_bonus', type=float, default=3.4)
+  parser.add_argument(
+      '--statuses',
+      default='saturated,solved',
+      help='comma-separated DDAR statuses to mine',
+  )
+  return parser.parse_args()
+
+
+def read_jsonl(path: str):
+  with open(path, encoding='utf-8') as f:
+    for line in f:
+      if not line.strip():
+        continue
+      try:
+        yield json.loads(line)
+      except json.JSONDecodeError:
+        continue
+
+
+def update_best(best: dict[str, Any], event: dict[str, Any], delta: float) -> None:
+  elapsed = event.get('elapsed_sec')
+  try:
+    elapsed_value = float(elapsed) if elapsed is not None else None
+  except (TypeError, ValueError):
+    elapsed_value = None
+  if delta > best.get('max_delta', float('-inf')):
+    best['max_delta'] = delta
+    best['best_added_dependencies'] = event.get('added_dependencies')
+    best['best_elapsed_sec'] = elapsed_value
+    best['best_status'] = event.get('status')
+    best['best_tag'] = event.get('tag')
+    best['best_problem'] = event.get('_problem')
+
+
+def mine(args: argparse.Namespace) -> dict[str, Any]:
+  statuses = {x.strip() for x in args.statuses.split(',') if x.strip()}
+  by_type: dict[str, dict[str, Any]] = {}
+  problem_counts = collections.Counter()
+  event_files = sorted(glob.glob(os.path.join(args.events_dir, '*.jsonl')))
+  for path in event_files:
+    problem = os.path.basename(path).removesuffix('.jsonl')
+    root_added = None
+    for event in read_jsonl(path):
+      event['_problem'] = problem
+      if event.get('kind') != 'ddar_done':
+        continue
+      if event.get('tag') == 'root':
+        try:
+          root_added = float(event.get('added_dependencies') or 0.0)
+        except (TypeError, ValueError):
+          root_added = 0.0
+        continue
+      if root_added is None:
+        continue
+      status = event.get('status')
+      if status not in statuses:
+        continue
+      typ = event.get('candidate_construction_type')
+      if not isinstance(typ, str) or not typ:
+        continue
+      try:
+        added = float(event.get('added_dependencies') or 0.0)
+      except (TypeError, ValueError):
+        continue
+      delta = added - root_added
+      if delta <= 0:
+        continue
+      is_solved = status == 'solved'
+      if not is_solved and delta < args.min_delta:
+        continue
+      elapsed = event.get('elapsed_sec')
+      try:
+        elapsed_value = float(elapsed) if elapsed is not None else 0.0
+      except (TypeError, ValueError):
+        elapsed_value = 0.0
+      if (
+          args.max_elapsed_sec > 0
+          and elapsed_value > args.max_elapsed_sec
+          and not is_solved
+      ):
+        continue
+      if (
+          args.min_efficiency > 0
+          and elapsed_value > 0
+          and delta / elapsed_value < args.min_efficiency
+          and not is_solved
+      ):
+        continue
+      item = by_type.setdefault(
+          typ,
+          {
+              'count': 0,
+              'solved_count': 0,
+              'problems': set(),
+              'max_delta': float('-inf'),
+          },
+      )
+      item['count'] += 1
+      item['solved_count'] += int(is_solved)
+      item['problems'].add(problem)
+      problem_counts[problem] += 1
+      update_best(item, event, delta)
+
+  rows = []
+  min_delta = max(args.min_delta, 1.0)
+  for typ, item in by_type.items():
+    repeat_bonus = min(
+        args.repeat_bonus_cap,
+        args.repeat_weight * math.log1p(max(0, item['count'] - 1)),
+    )
+    bonus = (
+        args.base_bonus
+        + args.delta_weight * math.log1p(max(0.0, item['max_delta']) / min_delta)
+        + repeat_bonus
+        + (args.solved_bonus if item['solved_count'] else 0.0)
+    )
+    if args.max_bonus > 0:
+      bonus = min(args.max_bonus, bonus)
+    rows.append({
+        'type': typ,
+        'bonus': round(bonus, 4),
+        'count': item['count'],
+        'solved_count': item['solved_count'],
+        'problem_count': len(item['problems']),
+        'problems': sorted(item['problems']),
+        'max_delta': item['max_delta'],
+        'best_added_dependencies': item.get('best_added_dependencies'),
+        'best_elapsed_sec': item.get('best_elapsed_sec'),
+        'best_status': item.get('best_status'),
+        'best_tag': item.get('best_tag'),
+        'best_problem': item.get('best_problem'),
+    })
+  rows.sort(
+      key=lambda item: (
+          -item['bonus'],
+          -item['max_delta'],
+          -item['solved_count'],
+          item['type'],
+      )
+  )
+  if args.topn > 0:
+    rows = rows[: args.topn]
+  return {
+      'type_bonus': {row['type']: row['bonus'] for row in rows},
+      'types': rows,
+      'metadata': {
+          'events_dir': args.events_dir,
+          'event_files': len(event_files),
+          'min_delta': args.min_delta,
+          'max_elapsed_sec': args.max_elapsed_sec,
+          'min_efficiency': args.min_efficiency,
+          'topn': args.topn,
+          'base_bonus': args.base_bonus,
+          'delta_weight': args.delta_weight,
+          'repeat_weight': args.repeat_weight,
+          'repeat_bonus_cap': args.repeat_bonus_cap,
+          'solved_bonus': args.solved_bonus,
+          'max_bonus': args.max_bonus,
+          'statuses': sorted(statuses),
+          'problem_signal_counts': dict(problem_counts),
+      },
+  }
+
+
+def main() -> None:
+  args = parse_args()
+  result = mine(args)
+  out = Path(args.out)
+  out.parent.mkdir(parents=True, exist_ok=True)
+  out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+  print(json.dumps({
+      'out': str(out),
+      'type_count': len(result['type_bonus']),
+      'top': result['types'][:10],
+  }, ensure_ascii=False), flush=True)
+
+
+if __name__ == '__main__':
+  main()

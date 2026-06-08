@@ -1551,7 +1551,12 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument(
       '--candidate_prompt_sampling',
-      choices=['none', 'balanced_constrained', 'mixed_constructive'],
+      choices=[
+          'none',
+          'balanced_constrained',
+          'mixed_constructive',
+          'mixed_progress_constructive',
+      ],
       default='none',
       help='sample candidates from construction-family prefixes',
   )

@@ -6,18 +6,18 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `postv12_progress_type_coverage_rerank_v1`.
+- Current GitHub source head: `postv12_progress_prefix_sampling_v1`.
 - Current running v12 clean bench tag:
   `unsolved_factctx_promptaug_top8_candidate_signal_postrun_value_v12_default_v1_depth48_t240_w150_nrs48_qm3_sigrep4_blinedia_statededup_nodediv_dsltpl_combotpl_rarecombo_vprior_v1`.
 - Current v12 clean source snapshot:
   `/tmp/qwen_ag_scripts_c541dd4` (`value_v12_default_queue_v1`). This active
   process is intentionally not overwritten.
 - Current waiting scout queue source:
-  `/tmp/qwen_ag_scripts_postv12_progress_type_coverage_rerank_v1`, tag
-  `unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v18coverage_after_v12_depth16_decbeam16_t160_w100_nrs48_qm3_timeoutfb4_beamscore_rerank_factmem_binddedup_salvage_v1`.
+  `/tmp/qwen_ag_scripts_postv12_progress_prefix_sampling_v1`, tag
+  `unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v18coverage_after_v12_depth16_decbeam16_t160_w100_nrs48_qm3_timeoutfb4_beamscore_rerank_progprefix_factmem_binddedup_salvage_v1`.
 - Current waiting post-v12 stage4 queue source:
-  `/tmp/qwen_ag_scripts_postv12_progress_type_coverage_rerank_v1`, tag
-  `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front8_progress_v18coverage_beamscore_rerank_decbeam16_depth24_t200_w120_nrs48_qm3_timeoutfb4_factmem_binddedup_salvage_v1`.
+  `/tmp/qwen_ag_scripts_postv12_progress_prefix_sampling_v1`, tag
+  `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front8_progress_v18coverage_beamscore_rerank_decbeam16_depth24_t200_w120_nrs48_qm3_timeoutfb4_progprefix_factmem_binddedup_salvage_v1`.
 - Running-workspace scripts are intentionally versioned in `/tmp` snapshots
   rather than overwritten in-place. The benchmark uses spawn-based candidate
   workers, so mixing source versions inside a long process can corrupt
@@ -834,6 +834,20 @@ changes. Tags are the practical version identifiers for this workspace.
   lower-progress candidates such as `on_line+on_tline` were scored much higher.
   This strategy gives those mined high-progress types explicit evaluation
   coverage without retraining or interrupting the active benchmark.
+
+### `postv12_progress_prefix_sampling_v1`
+
+- Git tag: `postv12_progress_prefix_sampling_v1`.
+- Adds `mixed_progress_constructive` candidate prompt sampling. It keeps the
+  existing balanced constrained and mixed constructive prefixes, then adds
+  direct constructive prefixes for `on_bline`, `on_dia`, and `eqdistance`.
+- Parameterizes `CLEAN_CANDIDATE_PROMPT_SAMPLING` in the postrun clean rerun
+  script; scout and stage4 clean defaults now use `mixed_progress_constructive`.
+- Motivation: the active `translated_imo_2009_p2` trace still spends many
+  depth-3 generations on `eqangle3`, while high-progress mined families include
+  `on_bline`, `on_bline+on_dia`, `on_bline+on_bline`, and
+  `eqdistance+on_circle`. The new sampling prefixes give those families a
+  better chance to appear before reranking.
 
 ## Versioning Rule
 

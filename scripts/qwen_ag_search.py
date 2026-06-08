@@ -333,7 +333,11 @@ def candidate_prompt_prefixes(
 ) -> list[str]:
   if strategy == 'none':
     return ['']
-  if strategy not in {'balanced_constrained', 'mixed_constructive'}:
+  if strategy not in {
+      'balanced_constrained',
+      'mixed_constructive',
+      'mixed_progress_constructive',
+  }:
     raise ValueError(f'unknown candidate prompt sampling strategy: {strategy}')
   new_point = next_free_point_name(forbidden_points or set())
   if not new_point:
@@ -346,7 +350,7 @@ def candidate_prompt_prefixes(
       prefixes.append(f'{new_point} : C ')
     else:
       prefixes.append(f'{new_point} : {predicate} {new_point} ')
-  if strategy == 'mixed_constructive':
+  if strategy in {'mixed_constructive', 'mixed_progress_constructive'}:
     prefixes.extend([
         f'{new_point} = on_line {new_point} ',
         f'{new_point} = on_circum {new_point} ',
@@ -354,6 +358,12 @@ def candidate_prompt_prefixes(
         f'{new_point} = on_tline {new_point} ',
         f'{new_point} = on_circle {new_point} ',
         f'{new_point} = eqangle3 ',
+    ])
+  if strategy == 'mixed_progress_constructive':
+    prefixes.extend([
+        f'{new_point} = on_bline {new_point} ',
+        f'{new_point} = on_dia {new_point} ',
+        f'{new_point} = eqdistance {new_point} ',
     ])
   return prefixes
 
@@ -2252,7 +2262,12 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument(
       '--candidate_prompt_sampling',
-      choices=['none', 'balanced_constrained', 'mixed_constructive'],
+      choices=[
+          'none',
+          'balanced_constrained',
+          'mixed_constructive',
+          'mixed_progress_constructive',
+      ],
       default='none',
       help='sample candidates from construction-family prefixes',
   )

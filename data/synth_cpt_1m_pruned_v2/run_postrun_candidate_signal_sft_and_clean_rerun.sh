@@ -63,6 +63,7 @@ CLEAN_CANDIDATE_WALL_TIMEOUT=${CLEAN_CANDIDATE_WALL_TIMEOUT:-150}
 CLEAN_CANDIDATE_DDAR_WORKERS=${CLEAN_CANDIDATE_DDAR_WORKERS:-8}
 CLEAN_CANDIDATE_BEAM_SCORE=${CLEAN_CANDIDATE_BEAM_SCORE:-lm_score}
 CLEAN_CANDIDATE_DECODE_BEAM_LIMIT=${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT:-0}
+CLEAN_CANDIDATE_PROMPT_SAMPLING=${CLEAN_CANDIDATE_PROMPT_SAMPLING:-mixed_constructive}
 CLEAN_BEAM_SIZE=${CLEAN_BEAM_SIZE:-64}
 CLEAN_SEARCH_DEPTH=${CLEAN_SEARCH_DEPTH:-4}
 CLEAN_NUM_RETURN_SEQUENCES=${CLEAN_NUM_RETURN_SEQUENCES:-48}
@@ -273,7 +274,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     )
   fi
   log "starting clean rerun: $CLEAN_RERUN_TAG"
-  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; decode beam limit: ${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT}; timeout beam fallback: ${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam score: ${CLEAN_CANDIDATE_BEAM_SCORE}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}; rerank: ${CLEAN_CANDIDATE_RERANK}; frontfill: ${CLEAN_FRONTFILL_LIMIT}; value model: ${VALUE_MODEL}; secondary value model: ${CLEAN_SECONDARY_VALUE_MODEL:-none}"
+  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; decode beam limit: ${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT}; timeout beam fallback: ${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam score: ${CLEAN_CANDIDATE_BEAM_SCORE}; prompt sampling: ${CLEAN_CANDIDATE_PROMPT_SAMPLING}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}; rerank: ${CLEAN_CANDIDATE_RERANK}; frontfill: ${CLEAN_FRONTFILL_LIMIT}; value model: ${VALUE_MODEL}; secondary value model: ${CLEAN_SECONDARY_VALUE_MODEL:-none}"
   log "clean rerun problem names: ${CLEAN_PROBLEM_NAMES}"
   xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchmark.py" \
     --script_dir "$SCRIPT_DIR" \
@@ -308,7 +309,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --candidate_point_repair \
     --candidate_point_mask \
     --candidate_canonical_dedup \
-    --candidate_prompt_sampling mixed_constructive \
+    --candidate_prompt_sampling "$CLEAN_CANDIDATE_PROMPT_SAMPLING" \
     --candidate_template_backfill \
     --candidate_rerank "$CLEAN_CANDIDATE_RERANK" \
     --candidate_value_model "$VALUE_MODEL" \

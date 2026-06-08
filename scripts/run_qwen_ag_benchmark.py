@@ -908,6 +908,8 @@ def post_canonical_template_backfill(
     pt: Any,
     preferred_points: set[str] | None = None,
     preferred_construction_types: list[str] | None = None,
+    args: argparse.Namespace | None = None,
+    adaptive_type_failures: dict[str, int] | None = None,
 ) -> None:
   if len(translated_candidates) >= target_count:
     return
@@ -937,6 +939,30 @@ def post_canonical_template_backfill(
         source='template_post_canonical_backfill',
     )
     if translation.startswith('ERROR:'):
+      if args is not None:
+        maybe_log_candidate_hard_negative_signal(
+            qs,
+            events_file,
+            problem_name,
+            depth,
+            raw,
+            translation,
+            prompt,
+            args,
+            source='template_post_canonical_backfill',
+        )
+        if adaptive_type_failures is not None:
+          note_adaptive_type_failure(
+              qs,
+              events_file,
+              adaptive_type_failures,
+              problem_name,
+              depth,
+              raw,
+              translation,
+              args,
+              source='template_post_canonical_backfill',
+          )
       continue
     canonical_key = qs.canonical_aux_key(translation)
     if canonical_key in seen_candidate_keys:
@@ -1533,6 +1559,8 @@ def solve_one(
               pt,
               qs.goal_point_names(p_cur),
               preferred_template_types,
+              args,
+              adaptive_type_failures,
           )
         ranked_node_candidates = qs.rerank_candidate_records(
             translated_candidates,
@@ -2222,6 +2250,8 @@ def solve_one(
             pt,
             qs.goal_point_names(p_cur),
             preferred_template_types,
+            args,
+            adaptive_type_failures,
         )
       ranked_candidates = qs.rerank_candidate_records(
           translated_candidates,

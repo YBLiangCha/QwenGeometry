@@ -62,6 +62,8 @@ CLEAN_CANDIDATE_DDAR_TIMEOUT=${CLEAN_CANDIDATE_DDAR_TIMEOUT:-240}
 CLEAN_CANDIDATE_WALL_TIMEOUT=${CLEAN_CANDIDATE_WALL_TIMEOUT:-150}
 CLEAN_CANDIDATE_DDAR_WORKERS=${CLEAN_CANDIDATE_DDAR_WORKERS:-8}
 CLEAN_CANDIDATE_BEAM_SCORE=${CLEAN_CANDIDATE_BEAM_SCORE:-lm_score}
+CLEAN_CANDIDATE_BEAM_PROGRESS_WEIGHT=${CLEAN_CANDIDATE_BEAM_PROGRESS_WEIGHT:-0.0}
+CLEAN_CANDIDATE_BEAM_PROGRESS_CAP=${CLEAN_CANDIDATE_BEAM_PROGRESS_CAP:-4.0}
 CLEAN_CANDIDATE_DECODE_BEAM_LIMIT=${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT:-0}
 CLEAN_CANDIDATE_PROMPT_SAMPLING=${CLEAN_CANDIDATE_PROMPT_SAMPLING:-mixed_constructive}
 CLEAN_BEAM_SIZE=${CLEAN_BEAM_SIZE:-64}
@@ -274,7 +276,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     )
   fi
   log "starting clean rerun: $CLEAN_RERUN_TAG"
-  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; decode beam limit: ${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT}; timeout beam fallback: ${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam score: ${CLEAN_CANDIDATE_BEAM_SCORE}; prompt sampling: ${CLEAN_CANDIDATE_PROMPT_SAMPLING}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}; rerank: ${CLEAN_CANDIDATE_RERANK}; frontfill: ${CLEAN_FRONTFILL_LIMIT}; value model: ${VALUE_MODEL}; secondary value model: ${CLEAN_SECONDARY_VALUE_MODEL:-none}"
+  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; decode beam limit: ${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT}; timeout beam fallback: ${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam score: ${CLEAN_CANDIDATE_BEAM_SCORE}; progress weight: ${CLEAN_CANDIDATE_BEAM_PROGRESS_WEIGHT}; progress cap: ${CLEAN_CANDIDATE_BEAM_PROGRESS_CAP}; prompt sampling: ${CLEAN_CANDIDATE_PROMPT_SAMPLING}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}; rerank: ${CLEAN_CANDIDATE_RERANK}; frontfill: ${CLEAN_FRONTFILL_LIMIT}; value model: ${VALUE_MODEL}; secondary value model: ${CLEAN_SECONDARY_VALUE_MODEL:-none}"
   log "clean rerun problem names: ${CLEAN_PROBLEM_NAMES}"
   xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchmark.py" \
     --script_dir "$SCRIPT_DIR" \
@@ -315,6 +317,8 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --candidate_value_model "$VALUE_MODEL" \
     "${CLEAN_SECONDARY_VALUE_MODEL_ARGS[@]}" \
     --candidate_beam_score "$CLEAN_CANDIDATE_BEAM_SCORE" \
+    --candidate_beam_progress_weight "$CLEAN_CANDIDATE_BEAM_PROGRESS_WEIGHT" \
+    --candidate_beam_progress_cap "$CLEAN_CANDIDATE_BEAM_PROGRESS_CAP" \
     --candidate_decode_beam_limit "$CLEAN_CANDIDATE_DECODE_BEAM_LIMIT" \
     --candidate_ddar_workers "$CLEAN_CANDIDATE_DDAR_WORKERS" \
     --lm_fact_context_top_k 8 \

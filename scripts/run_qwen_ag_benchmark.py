@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 import multiprocessing
 import re
@@ -655,6 +656,7 @@ def candidate_beam_score(
     lm_score: float,
     candidate_rerank_score: float | None,
     args: argparse.Namespace,
+    progress_delta_dependencies: int | float = 0,
 ) -> float:
   strategy = getattr(args, 'candidate_beam_score', 'lm_score')
   rerank_score = (
@@ -662,11 +664,40 @@ def candidate_beam_score(
       if isinstance(candidate_rerank_score, (int, float))
       else 0.0
   )
+  progress_delta = max(0.0, float(progress_delta_dependencies or 0.0))
+  progress_weight = max(0.0, float(getattr(args, 'candidate_beam_progress_weight', 0.0)))
+  progress_bonus = progress_weight * math.log1p(progress_delta)
+  progress_cap = float(getattr(args, 'candidate_beam_progress_cap', 0.0) or 0.0)
+  if progress_cap > 0:
+    progress_bonus = min(progress_bonus, progress_cap)
+  if strategy == 'rerank_plus_progress':
+    return prev_score + rerank_score + progress_bonus
   if strategy == 'rerank_score':
     return prev_score + rerank_score
   if strategy == 'lm_plus_rerank':
     return prev_score + lm_score + rerank_score
   return prev_score + lm_score
+
+
+def candidate_progress_delta(root: dict[str, Any], result: dict[str, Any]) -> int:
+  return max(
+      0,
+      int(result.get('added_dependencies') or 0)
+      - int(root.get('added_dependencies') or 0),
+  )
+
+
+def candidate_beam_progress_bonus(
+    args: argparse.Namespace,
+    progress_delta_dependencies: int | float,
+) -> float:
+  progress_delta = max(0.0, float(progress_delta_dependencies or 0.0))
+  progress_weight = max(0.0, float(getattr(args, 'candidate_beam_progress_weight', 0.0)))
+  progress_bonus = progress_weight * math.log1p(progress_delta)
+  progress_cap = float(getattr(args, 'candidate_beam_progress_cap', 0.0) or 0.0)
+  if progress_cap > 0:
+    progress_bonus = min(progress_bonus, progress_cap)
+  return progress_bonus
 
 
 def limited_beam_nodes(
@@ -680,7 +711,8 @@ def limited_beam_nodes(
   limit = int(getattr(args, 'candidate_decode_beam_limit', 0) or 0)
   if limit <= 0 or len(ordered) <= limit:
     return ordered
-  for score, (_, prompt, _) in ordered[limit:]:
+  for score, state in ordered[limit:]:
+    _, prompt, _, _ = unpack_beam_state(state)
     qs.event(
         events_file,
         kind='beam_decode_pruned',
@@ -1003,6 +1035,14 @@ def solve_one(
             result.get('fact_context'),
             args.lm_fact_context_top_k,
         )
+        progress_delta = candidate_progress_delta(root, result)
+        beam_score = candidate_beam_score(
+            record['prev_score'],
+            lm_score,
+            record.get('_candidate_rerank_score'),
+            args,
+            progress_delta,
+        )
         next_beam.add(
             make_beam_state(
                 g_new,
@@ -1018,12 +1058,23 @@ def solve_one(
                 p_new_txt,
                 next_fact_context,
             ),
-            candidate_beam_score(
-                record['prev_score'],
-                lm_score,
-                record.get('_candidate_rerank_score'),
-                args,
+            beam_score,
+        )
+        qs.event(
+            events_file,
+            kind='candidate_beam_add',
+            depth=depth,
+            raw=raw,
+            translation=translation,
+            candidate_beam_score=beam_score,
+            candidate_beam_score_strategy=args.candidate_beam_score,
+            candidate_beam_progress_delta=progress_delta,
+            candidate_beam_progress_bonus=candidate_beam_progress_bonus(
+                args, progress_delta
             ),
+            candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_source=record.get('source', 'lm'),
+            candidate_construction_type=qs.construction_type_key(translation),
         )
       timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
@@ -1080,6 +1131,14 @@ def solve_one(
             result.get('fact_context'),
             args.lm_fact_context_top_k,
         )
+        progress_delta = candidate_progress_delta(root, result)
+        beam_score = candidate_beam_score(
+            item['prev_score'],
+            item['lm_score'],
+            item.get('candidate_rerank_score'),
+            args,
+            progress_delta,
+        )
         next_beam.add(
             make_beam_state(
                 None,
@@ -1095,12 +1154,23 @@ def solve_one(
                 item['p_new_txt'],
                 next_fact_context,
             ),
-            candidate_beam_score(
-                item['prev_score'],
-                item['lm_score'],
-                item.get('candidate_rerank_score'),
-                args,
+            beam_score,
+        )
+        qs.event(
+            events_file,
+            kind='candidate_beam_add',
+            depth=depth,
+            raw=item['raw'],
+            translation=item['translation'],
+            candidate_beam_score=beam_score,
+            candidate_beam_score_strategy=args.candidate_beam_score,
+            candidate_beam_progress_delta=progress_delta,
+            candidate_beam_progress_bonus=candidate_beam_progress_bonus(
+                args, progress_delta
             ),
+            candidate_rerank_score=item.get('candidate_rerank_score'),
+            candidate_source=item.get('candidate_source') or 'lm',
+            candidate_construction_type=item.get('candidate_construction_type'),
         )
       maybe_add_timeout_beam_fallback(
           qs,
@@ -1338,6 +1408,14 @@ def solve_one(
             result.get('fact_context'),
             args.lm_fact_context_top_k,
         )
+        progress_delta = candidate_progress_delta(root, result)
+        beam_score = candidate_beam_score(
+            prev_score,
+            lm_score,
+            record.get('_candidate_rerank_score'),
+            args,
+            progress_delta,
+        )
         next_beam.add(
             make_beam_state(
                 g_new,
@@ -1353,12 +1431,23 @@ def solve_one(
                 p_new_txt,
                 next_fact_context,
             ),
-            candidate_beam_score(
-                prev_score,
-                lm_score,
-                record.get('_candidate_rerank_score'),
-                args,
+            beam_score,
+        )
+        qs.event(
+            events_file,
+            kind='candidate_beam_add',
+            depth=depth,
+            raw=raw,
+            translation=translation,
+            candidate_beam_score=beam_score,
+            candidate_beam_score_strategy=args.candidate_beam_score,
+            candidate_beam_progress_delta=progress_delta,
+            candidate_beam_progress_bonus=candidate_beam_progress_bonus(
+                args, progress_delta
             ),
+            candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_source=record.get('source', 'lm'),
+            candidate_construction_type=qs.construction_type_key(translation),
         )
       timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
@@ -1415,6 +1504,14 @@ def solve_one(
             result.get('fact_context'),
             args.lm_fact_context_top_k,
         )
+        progress_delta = candidate_progress_delta(root, result)
+        beam_score = candidate_beam_score(
+            item['prev_score'],
+            item['lm_score'],
+            item.get('candidate_rerank_score'),
+            args,
+            progress_delta,
+        )
         next_beam.add(
             make_beam_state(
                 None,
@@ -1430,12 +1527,23 @@ def solve_one(
                 item['p_new_txt'],
                 next_fact_context,
             ),
-            candidate_beam_score(
-                item['prev_score'],
-                item['lm_score'],
-                item.get('candidate_rerank_score'),
-                args,
+            beam_score,
+        )
+        qs.event(
+            events_file,
+            kind='candidate_beam_add',
+            depth=depth,
+            raw=item['raw'],
+            translation=item['translation'],
+            candidate_beam_score=beam_score,
+            candidate_beam_score_strategy=args.candidate_beam_score,
+            candidate_beam_progress_delta=progress_delta,
+            candidate_beam_progress_bonus=candidate_beam_progress_bonus(
+                args, progress_delta
             ),
+            candidate_rerank_score=item.get('candidate_rerank_score'),
+            candidate_source=item.get('candidate_source') or 'lm',
+            candidate_construction_type=item.get('candidate_construction_type'),
         )
       maybe_add_timeout_beam_fallback(
           qs,
@@ -1595,9 +1703,26 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument(
       '--candidate_beam_score',
-      choices=['lm_score', 'rerank_score', 'lm_plus_rerank'],
+      choices=[
+          'lm_score',
+          'rerank_score',
+          'lm_plus_rerank',
+          'rerank_plus_progress',
+      ],
       default='lm_score',
       help='score used to keep/order candidate states in the next search beam',
+  )
+  parser.add_argument(
+      '--candidate_beam_progress_weight',
+      type=float,
+      default=0.0,
+      help='log-scaled DDAR progress weight for rerank_plus_progress beam score',
+  )
+  parser.add_argument(
+      '--candidate_beam_progress_cap',
+      type=float,
+      default=4.0,
+      help='maximum DDAR progress bonus added by rerank_plus_progress; <=0 disables',
   )
   parser.add_argument(
       '--candidate_decode_beam_limit',

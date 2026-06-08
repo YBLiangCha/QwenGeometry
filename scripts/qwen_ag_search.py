@@ -180,6 +180,9 @@ _SIGNAL_ANCHOR_TYPE_BONUS = {
     'on_circum+on_line': 5.6,
     'on_bline': 3.2,
     'on_bline+on_circle': 3.2,
+    # IMO 2020 P1 depth-2 trace: high DDAR progress (delta 40) but this
+    # family previously only appeared in the later progress coverage phase.
+    'on_bline+on_circum': 3.2,
     'eqdistance+on_circum': 3.1,
     'eqdistance+on_tline': 3.1,
     'on_pline+on_tline': 3.1,

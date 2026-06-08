@@ -152,7 +152,7 @@ if [ ! -s "$VALUE_MODEL" ]; then
   echo "missing VALUE_MODEL for post-v12 clean rerun: $VALUE_MODEL" | tee -a "$QUEUE_LOG" >&2
   exit 1
 fi
-if [ "$CLEAN_CANDIDATE_RERANK" = "value_model_frontfill_diverse" ] && [ -n "$CLEAN_SECONDARY_VALUE_MODEL" ] && [ ! -s "$CLEAN_SECONDARY_VALUE_MODEL" ]; then
+if [ -n "$CLEAN_SECONDARY_VALUE_MODEL" ] && [ ! -s "$CLEAN_SECONDARY_VALUE_MODEL" ]; then
   if [ -s "$FALLBACK_SECONDARY_VALUE_MODEL" ]; then
     log "secondary value model missing, falling back: $FALLBACK_SECONDARY_VALUE_MODEL"
     CLEAN_SECONDARY_VALUE_MODEL="$FALLBACK_SECONDARY_VALUE_MODEL"

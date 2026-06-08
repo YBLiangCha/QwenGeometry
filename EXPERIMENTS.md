@@ -1082,6 +1082,12 @@ changes. Tags are the practical version identifiers for this workspace.
   `queue_v22tail_after_existing_qwen_pipelines.sh` as Qwen-active work.  This
   avoids a race where AG1 could start in the few-minute window after the
   current reference run exits but before the v23near queue wakes and launches.
+- Hybrid wrapper fallback was broadened for missing secondary value models.
+  The preferred `v21` secondary model was not present on the remote, while the
+  default reranker is `value_model_frontfill_progress_diverse`; the old exact
+  `value_model_frontfill_diverse` check would have skipped fallback and caused
+  the postrun clean rerun to fail.  The wrapper now falls back to the existing
+  `v16` secondary model whenever the configured secondary model is missing.
 
 ## Versioning Rule
 

@@ -14,7 +14,7 @@ WAIT_EXPECTED_ROWS=${WAIT_EXPECTED_ROWS:-16}
 WAIT_INTERVAL=${WAIT_INTERVAL:-300}
 WAIT_ALLOW_INCOMPLETE=${WAIT_ALLOW_INCOMPLETE:-0}
 
-SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_v16_pairwise_scout_depth8_t160_w100_nrs48_qm3_v1}
+SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v16_front12_v12_scout_depth16_t160_w100_nrs48_qm3_v1}
 SCOUT_OUT_DIR=${SCOUT_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${SCOUT_TAG}}
 SCOUT_LOG=${SCOUT_LOG:-outputs/${SCOUT_TAG}.log}
 SCOUT_QUEUE_LOG=${SCOUT_QUEUE_LOG:-outputs/${SCOUT_TAG}.queue.log}
@@ -23,9 +23,12 @@ SCOUT_PROBLEM_NAMES=${SCOUT_PROBLEM_NAMES:-}
 QWEN_MODEL=${QWEN_MODEL:-models/Qwen2.5-7B}
 ADAPTER_PATH=${ADAPTER_PATH:-outputs/stage3_candidate_signal_after_factctx_lora_qwen2_5_7b_candidate_signal_sft_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_postrun_value_v12_default_v1}
 VALUE_MODEL=${VALUE_MODEL:-outputs/candidate_value_model_v16_pairwise_solved_biased_progress_filter_oldfull_current4_v1/candidate_value_model.json}
+SECONDARY_VALUE_MODEL=${SECONDARY_VALUE_MODEL:-outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1/candidate_value_model.json}
+SCOUT_RERANK=${SCOUT_RERANK:-value_model_frontfill_diverse}
+SCOUT_FRONTFILL_LIMIT=${SCOUT_FRONTFILL_LIMIT:-12}
 
 SCOUT_CANDIDATE_EVAL_LIMIT=${SCOUT_CANDIDATE_EVAL_LIMIT:-0}
-SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT:-8}
+SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT:-16}
 SCOUT_CANDIDATE_DDAR_TIMEOUT=${SCOUT_CANDIDATE_DDAR_TIMEOUT:-160}
 SCOUT_CANDIDATE_WALL_TIMEOUT=${SCOUT_CANDIDATE_WALL_TIMEOUT:-100}
 SCOUT_CANDIDATE_DDAR_WORKERS=${SCOUT_CANDIDATE_DDAR_WORKERS:-8}
@@ -137,6 +140,10 @@ if [ ! -s "$VALUE_MODEL" ]; then
   echo "missing VALUE_MODEL: $VALUE_MODEL" | tee -a "$SCOUT_QUEUE_LOG" >&2
   exit 1
 fi
+if [ "$SCOUT_RERANK" = "value_model_frontfill_diverse" ] && [ ! -s "$SECONDARY_VALUE_MODEL" ]; then
+  echo "missing SECONDARY_VALUE_MODEL: $SECONDARY_VALUE_MODEL" | tee -a "$SCOUT_QUEUE_LOG" >&2
+  exit 1
+fi
 if [ ! -s "$ADAPTER_PATH/adapter_model.safetensors" ]; then
   echo "missing adapter: $ADAPTER_PATH" | tee -a "$SCOUT_QUEUE_LOG" >&2
   exit 1
@@ -144,11 +151,19 @@ fi
 
 log "starting v16 pairwise scout: $SCOUT_TAG"
 log "problem_names=$SCOUT_PROBLEM_NAMES"
-log "depth_eval_limit=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate_timeout=${SCOUT_CANDIDATE_DDAR_TIMEOUT}; wall_timeout=${SCOUT_CANDIDATE_WALL_TIMEOUT}; workers=${SCOUT_CANDIDATE_DDAR_WORKERS}; value_model=$VALUE_MODEL"
+log "depth_eval_limit=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate_timeout=${SCOUT_CANDIDATE_DDAR_TIMEOUT}; wall_timeout=${SCOUT_CANDIDATE_WALL_TIMEOUT}; workers=${SCOUT_CANDIDATE_DDAR_WORKERS}; rerank=${SCOUT_RERANK}; frontfill=${SCOUT_FRONTFILL_LIMIT}; value_model=$VALUE_MODEL; secondary_value_model=$SECONDARY_VALUE_MODEL"
 
 if [ "$DRY_RUN" = "1" ]; then
   log "dry run enabled; scout command not launched"
   exit 0
+fi
+
+SECONDARY_VALUE_MODEL_ARGS=()
+if [ -n "$SECONDARY_VALUE_MODEL" ]; then
+  SECONDARY_VALUE_MODEL_ARGS=(
+    --candidate_secondary_value_model "$SECONDARY_VALUE_MODEL"
+    --candidate_frontfill_limit "$SCOUT_FRONTFILL_LIMIT"
+  )
 fi
 
 xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchmark.py" \
@@ -185,8 +200,9 @@ xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchm
   --candidate_canonical_dedup \
   --candidate_prompt_sampling mixed_constructive \
   --candidate_template_backfill \
-  --candidate_rerank value_model_diverse \
+  --candidate_rerank "$SCOUT_RERANK" \
   --candidate_value_model "$VALUE_MODEL" \
+  "${SECONDARY_VALUE_MODEL_ARGS[@]}" \
   --candidate_ddar_workers "$SCOUT_CANDIDATE_DDAR_WORKERS" \
   --lm_fact_context_top_k 8 \
   >> "$SCOUT_LOG" 2>&1

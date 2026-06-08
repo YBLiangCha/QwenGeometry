@@ -976,6 +976,8 @@ def rerank_candidate_records(
     records: list[dict[str, Any]],
     strategy: str,
     value_model: dict[str, Any] | None = None,
+    secondary_value_model: dict[str, Any] | None = None,
+    frontfill_limit: int = 8,
 ) -> list[dict[str, Any]]:
   """Optionally interleave translated candidates by construction type."""
   if strategy == 'none' or len(records) <= 1:
@@ -992,6 +994,42 @@ def rerank_candidate_records(
         key=lambda record: record['_candidate_rerank_score'],
         reverse=True,
     )
+  if strategy == 'value_model_frontfill_diverse':
+    if value_model is None or secondary_value_model is None:
+      raise ValueError(
+          '--candidate_value_model and --candidate_secondary_value_model are '
+          'required for value_model_frontfill_diverse rerank'
+      )
+    front_records = rerank_candidate_records(
+        records,
+        'value_model_diverse',
+        value_model,
+    )
+    for record in records:
+      record['_candidate_frontfill_score'] = record.get('_candidate_rerank_score')
+    coverage_records = rerank_candidate_records(
+        records,
+        'value_model_diverse',
+        secondary_value_model,
+    )
+    for record in records:
+      record['_candidate_coverage_score'] = record.get('_candidate_rerank_score')
+    selected: list[dict[str, Any]] = []
+    selected_ids: set[int] = set()
+    limit = max(0, min(frontfill_limit, len(records)))
+    for record in front_records[:limit]:
+      selected.append(record)
+      selected_ids.add(id(record))
+      record['_candidate_rerank_score'] = record.get('_candidate_frontfill_score')
+      record['_candidate_rerank_phase'] = 'frontfill'
+    for record in coverage_records:
+      if id(record) in selected_ids:
+        continue
+      selected.append(record)
+      selected_ids.add(id(record))
+      record['_candidate_rerank_score'] = record.get('_candidate_coverage_score')
+      record['_candidate_rerank_phase'] = 'coverage'
+    return selected
   if strategy == 'value_model_diverse':
     if value_model is None:
       raise ValueError(
@@ -1683,6 +1721,9 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
   beam = BeamQueue(args.beam_size)
   beam.add((g, prompt0, p.txt()), 0.0)
   value_model = load_candidate_value_model(args.candidate_value_model)
+  secondary_value_model = load_candidate_value_model(
+      args.candidate_secondary_value_model
+  )
 
   for depth in range(args.search_depth):
     event(args.events_file, kind='depth_start', depth=depth, nodes=len(beam))
@@ -1785,7 +1826,11 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
               'source': source,
           })
         ranked_node_candidates = rerank_candidate_records(
-            translated_candidates, args.candidate_rerank, value_model
+            translated_candidates,
+            args.candidate_rerank,
+            value_model,
+            secondary_value_model,
+            args.candidate_frontfill_limit,
         )
         if args.candidate_eval_limit and args.candidate_eval_limit > 0:
           for record in ranked_node_candidates[args.candidate_eval_limit:]:
@@ -1809,7 +1854,11 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
           })
           depth_candidates.append(record)
       ranked_depth_candidates = rerank_candidate_records(
-          depth_candidates, args.candidate_rerank, value_model
+          depth_candidates,
+          args.candidate_rerank,
+          value_model,
+          secondary_value_model,
+          args.candidate_frontfill_limit,
       )
       for record in ranked_depth_candidates[args.candidate_depth_eval_limit:]:
         event(
@@ -1963,7 +2012,11 @@ def run_qwen_search(args: argparse.Namespace) -> bool:
             'source': source,
         })
       ranked_candidates = rerank_candidate_records(
-          translated_candidates, args.candidate_rerank, value_model
+          translated_candidates,
+          args.candidate_rerank,
+          value_model,
+          secondary_value_model,
+          args.candidate_frontfill_limit,
       )
       if args.candidate_eval_limit and args.candidate_eval_limit > 0:
         for record in ranked_candidates[args.candidate_eval_limit:]:
@@ -2100,13 +2153,29 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument(
       '--candidate_rerank',
-      choices=['none', 'heuristic_diverse', 'value_model', 'value_model_diverse'],
+      choices=[
+          'none',
+          'heuristic_diverse',
+          'value_model',
+          'value_model_diverse',
+          'value_model_frontfill_diverse',
+      ],
       default='none',
       help='optional translated-candidate reranker before DDAR evaluation',
   )
   parser.add_argument(
       '--candidate_value_model',
       help='JSON value model for value_model candidate reranking',
+  )
+  parser.add_argument(
+      '--candidate_secondary_value_model',
+      help='secondary JSON value model for value_model_frontfill_diverse coverage',
+  )
+  parser.add_argument(
+      '--candidate_frontfill_limit',
+      type=int,
+      default=8,
+      help='front slots filled by --candidate_value_model in frontfill rerank',
   )
   parser.add_argument(
       '--candidate_eval_limit',

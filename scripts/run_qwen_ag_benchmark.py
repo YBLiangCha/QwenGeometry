@@ -549,6 +549,7 @@ def solve_one(
   candidate_timeout = args.candidate_ddar_timeout or args.ddar_timeout
   candidate_wall_timeout = args.candidate_wall_timeout or candidate_timeout
   value_model = getattr(args, '_candidate_value_model', None)
+  secondary_value_model = getattr(args, '_candidate_secondary_value_model', None)
 
   for depth in range(args.search_depth):
     qs.event(events_file, kind='depth_start', depth=depth, nodes=len(beam))
@@ -678,7 +679,11 @@ def solve_one(
               qs.goal_point_names(p_cur),
           )
         ranked_node_candidates = qs.rerank_candidate_records(
-            translated_candidates, args.candidate_rerank, value_model
+            translated_candidates,
+            args.candidate_rerank,
+            value_model,
+            secondary_value_model,
+            args.candidate_frontfill_limit,
         )
         if args.candidate_eval_limit and args.candidate_eval_limit > 0:
           for record in ranked_node_candidates[args.candidate_eval_limit:]:
@@ -707,7 +712,11 @@ def solve_one(
           })
           depth_candidates.append(record)
       ranked_depth_candidates = qs.rerank_candidate_records(
-          depth_candidates, args.candidate_rerank, value_model
+          depth_candidates,
+          args.candidate_rerank,
+          value_model,
+          secondary_value_model,
+          args.candidate_frontfill_limit,
       )
       for record in ranked_depth_candidates[args.candidate_depth_eval_limit:]:
         qs.event(
@@ -997,7 +1006,11 @@ def solve_one(
             qs.goal_point_names(p_cur),
         )
       ranked_candidates = qs.rerank_candidate_records(
-          translated_candidates, args.candidate_rerank, value_model
+          translated_candidates,
+          args.candidate_rerank,
+          value_model,
+          secondary_value_model,
+          args.candidate_frontfill_limit,
       )
       if args.candidate_eval_limit and args.candidate_eval_limit > 0:
         for record in ranked_candidates[args.candidate_eval_limit:]:
@@ -1268,13 +1281,29 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument(
       '--candidate_rerank',
-      choices=['none', 'heuristic_diverse', 'value_model', 'value_model_diverse'],
+      choices=[
+          'none',
+          'heuristic_diverse',
+          'value_model',
+          'value_model_diverse',
+          'value_model_frontfill_diverse',
+      ],
       default='none',
       help='optional translated-candidate reranker before DDAR evaluation',
   )
   parser.add_argument(
       '--candidate_value_model',
       help='JSON value model for value_model candidate reranking',
+  )
+  parser.add_argument(
+      '--candidate_secondary_value_model',
+      help='secondary JSON value model for value_model_frontfill_diverse coverage',
+  )
+  parser.add_argument(
+      '--candidate_frontfill_limit',
+      type=int,
+      default=8,
+      help='front slots filled by --candidate_value_model in frontfill rerank',
   )
   parser.add_argument(
       '--candidate_ddar_workers',
@@ -1344,6 +1373,9 @@ def main() -> None:
   qs.RULES = pr.Theorem.from_txt_file(args.rules_file, to_dict=True)
   args._candidate_value_model = qs.load_candidate_value_model(
       args.candidate_value_model
+  )
+  args._candidate_secondary_value_model = qs.load_candidate_value_model(
+      args.candidate_secondary_value_model
   )
 
   problems = pr.Problem.from_txt_file(

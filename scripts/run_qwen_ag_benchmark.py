@@ -565,6 +565,7 @@ def apply_adaptive_type_penalties(
 
 def dynamic_progress_type_bonus(
     progress_delta_dependencies: int | float,
+    root_added_dependencies: int | float,
     args: argparse.Namespace,
 ) -> float:
   if not getattr(args, 'candidate_dynamic_progress_type_anchor', False):
@@ -574,12 +575,24 @@ def dynamic_progress_type_bonus(
   except (TypeError, ValueError):
     return 0.0
   min_delta = max(0.0, float(args.candidate_dynamic_progress_type_min_delta))
-  if delta < min_delta:
+  min_floor = max(
+      0.0, float(args.candidate_dynamic_progress_type_min_delta_floor)
+  )
+  min_ratio = max(
+      0.0, float(args.candidate_dynamic_progress_type_min_root_ratio)
+  )
+  try:
+    root_added = float(root_added_dependencies or 0.0)
+  except (TypeError, ValueError):
+    root_added = 0.0
+  ratio = delta / root_added if root_added > 0 else 0.0
+  if delta < min_delta and not (delta >= min_floor and ratio >= min_ratio):
     return 0.0
   base = max(0.0, float(args.candidate_dynamic_progress_type_bonus_base))
   weight = max(0.0, float(args.candidate_dynamic_progress_type_bonus_weight))
   max_bonus = max(0.0, float(args.candidate_dynamic_progress_type_bonus_max))
-  bonus = base + weight * math.log1p(delta - min_delta + 1.0)
+  effective_delta = max(delta - min_floor + 1.0, 1.0)
+  bonus = base + weight * math.log1p(effective_delta)
   if max_bonus > 0:
     bonus = min(max_bonus, bonus)
   return max(0.0, bonus)
@@ -595,10 +608,13 @@ def note_dynamic_progress_type_anchor(
     translation: str,
     construction_type: str | None,
     progress_delta_dependencies: int | float,
+    root_added_dependencies: int | float,
     args: argparse.Namespace,
     source: str = 'lm',
 ) -> None:
-  bonus = dynamic_progress_type_bonus(progress_delta_dependencies, args)
+  bonus = dynamic_progress_type_bonus(
+      progress_delta_dependencies, root_added_dependencies, args
+  )
   if bonus <= 0:
     return
   construction_type = construction_type or qs.construction_type_key(translation)
@@ -618,10 +634,17 @@ def note_dynamic_progress_type_anchor(
       candidate_construction_type=construction_type,
       candidate_source=source,
       progress_delta_dependencies=progress_delta_dependencies,
+      root_added_dependencies=root_added_dependencies,
       candidate_dynamic_progress_type_bonus=round(bonus, 4),
       previous_dynamic_progress_type_bonus=round(previous, 4),
       candidate_dynamic_progress_type_min_delta=(
           args.candidate_dynamic_progress_type_min_delta
+      ),
+      candidate_dynamic_progress_type_min_delta_floor=(
+          args.candidate_dynamic_progress_type_min_delta_floor
+      ),
+      candidate_dynamic_progress_type_min_root_ratio=(
+          args.candidate_dynamic_progress_type_min_root_ratio
       ),
   )
 
@@ -1597,6 +1620,7 @@ def solve_one(
             translation,
             qs.construction_type_key(translation),
             progress_delta,
+            root.get('added_dependencies') or 0,
             args,
             source=record.get('source', 'lm'),
         )
@@ -1762,6 +1786,7 @@ def solve_one(
             item['translation'],
             item.get('candidate_construction_type'),
             progress_delta,
+            root.get('added_dependencies') or 0,
             args,
             source=item.get('candidate_source') or 'lm',
         )
@@ -2149,6 +2174,7 @@ def solve_one(
             translation,
             qs.construction_type_key(translation),
             progress_delta,
+            root.get('added_dependencies') or 0,
             args,
             source=record.get('source', 'lm'),
         )
@@ -2314,6 +2340,7 @@ def solve_one(
             item['translation'],
             item.get('candidate_construction_type'),
             progress_delta,
+            root.get('added_dependencies') or 0,
             args,
             source=item.get('candidate_source') or 'lm',
         )
@@ -2509,6 +2536,24 @@ def parse_args() -> argparse.Namespace:
       type=float,
       default=60.0,
       help='minimum added-dependency delta over root before a type gets dynamic coverage',
+  )
+  parser.add_argument(
+      '--candidate_dynamic_progress_type_min_delta_floor',
+      type=float,
+      default=25.0,
+      help=(
+          'minimum absolute delta for the relative-root dynamic progress '
+          'trigger'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_dynamic_progress_type_min_root_ratio',
+      type=float,
+      default=0.6,
+      help=(
+          'also trigger dynamic coverage when delta/root_added_dependencies '
+          'is at least this ratio'
+      ),
   )
   parser.add_argument(
       '--candidate_dynamic_progress_type_bonus_base',

@@ -129,6 +129,10 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     'on_bline+on_circle': 2.3,
     'on_circle+on_line': 2.3,
     'on_circle+on_dia': 2.2,
+    # IMO 2020 P1 current trace: these are high relative progress on a small
+    # root graph, so protect them before dynamic anchoring can observe them.
+    'eqdistance+on_tline': 2.2,
+    'on_pline+on_tline': 2.1,
     'on_circle+on_circum': 2.1,
     'on_circle+on_pline': 2.0,
     'eqdistance+on_bline': 2.0,
@@ -177,6 +181,8 @@ _SIGNAL_ANCHOR_TYPE_BONUS = {
     'on_bline': 3.2,
     'on_bline+on_circle': 3.2,
     'eqdistance+on_circum': 3.1,
+    'eqdistance+on_tline': 3.1,
+    'on_pline+on_tline': 3.1,
     'on_circle+on_pline': 3.1,
     'on_tline+on_tline': 3.1,
     'eqdistance+on_line': 3.0,

@@ -1230,6 +1230,8 @@ def rerank_candidate_records(
       record['_candidate_rerank_score'] = record.get('_candidate_frontfill_score')
       record['_candidate_rerank_phase'] = 'frontfill'
     if strategy == 'value_model_frontfill_progress_diverse':
+      signal_anchor_limit = max(0, min(frontfill_limit, len(records)))
+      signal_anchor_count = 0
       for record in signal_anchor_coverage_records(records):
         if id(record) in selected_ids:
           continue
@@ -1237,6 +1239,9 @@ def rerank_candidate_records(
         selected_ids.add(id(record))
         record['_candidate_rerank_score'] = record.get('_candidate_frontfill_score')
         record['_candidate_rerank_phase'] = 'signal_anchor_coverage'
+        signal_anchor_count += 1
+        if signal_anchor_count >= signal_anchor_limit:
+          break
       for record in progress_type_coverage_records(records):
         if id(record) in selected_ids:
           continue

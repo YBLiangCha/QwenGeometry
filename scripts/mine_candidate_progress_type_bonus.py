@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument('--max_elapsed_sec', type=float, default=0.0)
   parser.add_argument('--min_efficiency', type=float, default=0.0)
   parser.add_argument('--topn', type=int, default=64)
+  parser.add_argument('--per_problem_topn', type=int, default=12)
   parser.add_argument('--base_bonus', type=float, default=1.6)
   parser.add_argument('--delta_weight', type=float, default=0.9)
   parser.add_argument('--repeat_weight', type=float, default=0.15)
@@ -65,9 +66,45 @@ def update_best(best: dict[str, Any], event: dict[str, Any], delta: float) -> No
     best['best_problem'] = event.get('_problem')
 
 
+def new_progress_item() -> dict[str, Any]:
+  return {
+      'count': 0,
+      'solved_count': 0,
+      'problems': set(),
+      'max_delta': float('-inf'),
+      'max_root_ratio': 0.0,
+  }
+
+
+def score_progress_item(
+    args: argparse.Namespace,
+    item: dict[str, Any],
+    min_delta: float,
+) -> tuple[float, float]:
+  repeat_bonus = min(
+      args.repeat_bonus_cap,
+      args.repeat_weight * math.log1p(max(0, item['count'] - 1)),
+  )
+  ratio_bonus = min(
+      args.ratio_bonus_cap,
+      args.ratio_weight * math.log1p(max(0.0, item.get('max_root_ratio', 0.0))),
+  )
+  bonus = (
+      args.base_bonus
+      + args.delta_weight * math.log1p(max(0.0, item['max_delta']) / min_delta)
+      + repeat_bonus
+      + ratio_bonus
+      + (args.solved_bonus if item['solved_count'] else 0.0)
+  )
+  if args.max_bonus > 0:
+    bonus = min(args.max_bonus, bonus)
+  return bonus, ratio_bonus
+
+
 def mine(args: argparse.Namespace) -> dict[str, Any]:
   statuses = {x.strip() for x in args.statuses.split(',') if x.strip()}
   by_type: dict[str, dict[str, Any]] = {}
+  by_problem_type: dict[str, dict[str, dict[str, Any]]] = collections.defaultdict(dict)
   problem_counts = collections.Counter()
   event_files = sorted(glob.glob(os.path.join(args.events_dir, '*.jsonl')))
   for path in event_files:
@@ -125,43 +162,20 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
       )
       if not is_solved and delta < args.min_delta and not ratio_pass:
         continue
-      item = by_type.setdefault(
-          typ,
-          {
-              'count': 0,
-              'solved_count': 0,
-              'problems': set(),
-              'max_delta': float('-inf'),
-              'max_root_ratio': 0.0,
-          },
-      )
-      item['count'] += 1
-      item['solved_count'] += int(is_solved)
-      item['problems'].add(problem)
-      item['max_root_ratio'] = max(item['max_root_ratio'], root_ratio)
+      item = by_type.setdefault(typ, new_progress_item())
+      problem_item = by_problem_type[problem].setdefault(typ, new_progress_item())
+      for target in (item, problem_item):
+        target['count'] += 1
+        target['solved_count'] += int(is_solved)
+        target['problems'].add(problem)
+        target['max_root_ratio'] = max(target['max_root_ratio'], root_ratio)
+        update_best(target, event, delta)
       problem_counts[problem] += 1
-      update_best(item, event, delta)
 
   rows = []
   min_delta = max(args.min_delta, 1.0)
   for typ, item in by_type.items():
-    repeat_bonus = min(
-        args.repeat_bonus_cap,
-        args.repeat_weight * math.log1p(max(0, item['count'] - 1)),
-    )
-    ratio_bonus = min(
-        args.ratio_bonus_cap,
-        args.ratio_weight * math.log1p(max(0.0, item.get('max_root_ratio', 0.0))),
-    )
-    bonus = (
-        args.base_bonus
-        + args.delta_weight * math.log1p(max(0.0, item['max_delta']) / min_delta)
-        + repeat_bonus
-        + ratio_bonus
-        + (args.solved_bonus if item['solved_count'] else 0.0)
-    )
-    if args.max_bonus > 0:
-      bonus = min(args.max_bonus, bonus)
+    bonus, ratio_bonus = score_progress_item(args, item, min_delta)
     rows.append({
         'type': typ,
         'bonus': round(bonus, 4),
@@ -188,9 +202,44 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
   )
   if args.topn > 0:
     rows = rows[: args.topn]
+
+  per_problem_types: dict[str, list[dict[str, Any]]] = {}
+  for problem, type_items in by_problem_type.items():
+    problem_rows = []
+    for typ, item in type_items.items():
+      bonus, ratio_bonus = score_progress_item(args, item, min_delta)
+      problem_rows.append({
+          'type': typ,
+          'bonus': round(bonus, 4),
+          'count': item['count'],
+          'solved_count': item['solved_count'],
+          'max_delta': item['max_delta'],
+          'max_root_ratio': round(item.get('max_root_ratio', 0.0), 4),
+          'ratio_bonus': round(ratio_bonus, 4),
+          'best_added_dependencies': item.get('best_added_dependencies'),
+          'best_elapsed_sec': item.get('best_elapsed_sec'),
+          'best_status': item.get('best_status'),
+          'best_tag': item.get('best_tag'),
+      })
+    problem_rows.sort(
+        key=lambda item: (
+            -item['bonus'],
+            -item['max_delta'],
+            -item['solved_count'],
+            item['type'],
+        )
+    )
+    if args.per_problem_topn > 0:
+      problem_rows = problem_rows[: args.per_problem_topn]
+    per_problem_types[problem] = problem_rows
   return {
       'type_bonus': {row['type']: row['bonus'] for row in rows},
+      'per_problem_type_bonus': {
+          problem: {row['type']: row['bonus'] for row in problem_rows}
+          for problem, problem_rows in sorted(per_problem_types.items())
+      },
       'types': rows,
+      'per_problem_types': per_problem_types,
       'metadata': {
           'events_dir': args.events_dir,
           'event_files': len(event_files),
@@ -200,6 +249,7 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
           'max_elapsed_sec': args.max_elapsed_sec,
           'min_efficiency': args.min_efficiency,
           'topn': args.topn,
+          'per_problem_topn': args.per_problem_topn,
           'base_bonus': args.base_bonus,
           'delta_weight': args.delta_weight,
           'repeat_weight': args.repeat_weight,

@@ -1273,21 +1273,30 @@ def solve_one(
   static_progress_type_bonuses = getattr(
       args, '_candidate_static_progress_type_bonus', {}
   )
+  problem_static_progress_type_bonuses = getattr(
+      args, '_candidate_static_progress_type_bonus_by_problem', {}
+  ).get(p.url, {})
   dynamic_progress_type_bonuses: dict[str, float] = {}
-  if static_progress_type_bonuses:
+  if static_progress_type_bonuses or problem_static_progress_type_bonuses:
     qs.event(
         events_file,
         kind='candidate_static_progress_type_bonus_loaded',
         path=args.candidate_static_progress_type_bonus,
         count=len(static_progress_type_bonuses),
+        per_problem_count=len(problem_static_progress_type_bonuses),
         top=sorted(
             static_progress_type_bonuses.items(), key=lambda item: -item[1]
+        )[:12],
+        per_problem_top=sorted(
+            problem_static_progress_type_bonuses.items(), key=lambda item: -item[1]
         )[:12],
     )
 
   def type_bonus_context() -> dict[str, float]:
     return merge_type_bonus_maps(
-        static_progress_type_bonuses, dynamic_progress_type_bonuses
+        static_progress_type_bonuses,
+        problem_static_progress_type_bonuses,
+        dynamic_progress_type_bonuses,
     )
 
   for depth in range(args.search_depth):
@@ -2521,22 +2530,7 @@ def parse_problem_names(value: str | None) -> set[str] | None:
   return {x.strip() for x in value.split(',') if x.strip()}
 
 
-def load_candidate_static_progress_type_bonus(
-    path: str | None,
-) -> dict[str, float]:
-  if not path:
-    return {}
-  bonus_path = Path(path)
-  if not bonus_path.exists():
-    raise FileNotFoundError(f'candidate static progress type bonus not found: {path}')
-  data = json.loads(bonus_path.read_text(encoding='utf-8-sig'))
-  if isinstance(data, dict) and isinstance(data.get('type_bonus'), dict):
-    data = data['type_bonus']
-  if not isinstance(data, dict):
-    raise ValueError(
-        '--candidate_static_progress_type_bonus must be a JSON object or '
-        'contain a type_bonus object'
-    )
+def parse_type_bonus_map(data: Any) -> dict[str, float]:
   parsed: dict[str, float] = {}
   for key, value in data.items():
     if not isinstance(key, str):
@@ -2548,6 +2542,36 @@ def load_candidate_static_progress_type_bonus(
     if score > 0.0:
       parsed[key] = score
   return parsed
+
+
+def load_candidate_static_progress_type_bonus(
+    path: str | None,
+) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
+  if not path:
+    return {}, {}
+  bonus_path = Path(path)
+  if not bonus_path.exists():
+    raise FileNotFoundError(f'candidate static progress type bonus not found: {path}')
+  data = json.loads(bonus_path.read_text(encoding='utf-8-sig'))
+  if not isinstance(data, dict):
+    raise ValueError(
+        '--candidate_static_progress_type_bonus must be a JSON object or '
+        'contain a type_bonus object'
+    )
+  if isinstance(data.get('type_bonus'), dict):
+    global_data = data['type_bonus']
+    per_problem_data = data.get('per_problem_type_bonus', {})
+  else:
+    global_data = data
+    per_problem_data = {}
+  parsed_per_problem: dict[str, dict[str, float]] = {}
+  if isinstance(per_problem_data, dict):
+    for problem, values in per_problem_data.items():
+      if isinstance(problem, str) and isinstance(values, dict):
+        parsed = parse_type_bonus_map(values)
+        if parsed:
+          parsed_per_problem[problem] = parsed
+  return parse_type_bonus_map(global_data), parsed_per_problem
 
 
 def merge_type_bonus_maps(*maps: dict[str, float] | None) -> dict[str, float]:
@@ -2938,10 +2962,11 @@ def main() -> None:
   args._candidate_secondary_value_model = qs.load_candidate_value_model(
       args.candidate_secondary_value_model
   )
-  args._candidate_static_progress_type_bonus = (
-      load_candidate_static_progress_type_bonus(
-          args.candidate_static_progress_type_bonus
-      )
+  (
+      args._candidate_static_progress_type_bonus,
+      args._candidate_static_progress_type_bonus_by_problem,
+  ) = (
+      load_candidate_static_progress_type_bonus(args.candidate_static_progress_type_bonus)
   )
 
   problems = pr.Problem.from_txt_file(

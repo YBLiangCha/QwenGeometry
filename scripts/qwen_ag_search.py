@@ -119,6 +119,9 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     'on_line+on_line': 2.8,
     'eqdistance+on_circle': 2.5,
     'on_bline+on_circum': 2.5,
+    # IMO 2018 P1 current trace: strongest DDAR-progress candidate uses
+    # on_circle+on_tline (delta 193), so reserve coverage before it is solved.
+    'on_circle+on_tline': 2.4,
     'on_bline+on_circle': 2.3,
     'on_circle+on_line': 2.3,
     'on_circle+on_dia': 2.2,
@@ -162,6 +165,7 @@ _SIGNAL_ANCHOR_TYPE_BONUS = {
     'on_circum+on_tline': 3.6,
     'on_circle+on_circum': 3.5,
     'eqangle3': 3.4,
+    'on_circle+on_tline': 3.4,
     'on_circum+on_circum': 3.4,
     'on_circum+on_line': 5.6,
     'on_bline': 3.2,

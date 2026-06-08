@@ -118,6 +118,15 @@ def inferred_construction_type(qs: Any, raw: str, translation: str) -> str:
   return 'error'
 
 
+def numeric(value: Any, default: float = 0.0) -> float:
+  if isinstance(value, (int, float)):
+    return float(value)
+  try:
+    return float(value)
+  except (TypeError, ValueError):
+    return default
+
+
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser()
   parser.add_argument('--events_dir', required=True)
@@ -149,6 +158,30 @@ def parse_args() -> argparse.Namespace:
       help='do not label slow valid candidates as weak positives; <=0 disables',
   )
   parser.add_argument(
+      '--progress_positive_min_efficiency',
+      type=float,
+      default=0.0,
+      help='minimum progress_delta_dependencies / elapsed_sec for weak positives',
+  )
+  parser.add_argument(
+      '--max_progress_positives_per_problem',
+      type=int,
+      default=0,
+      help='cap weak positives per problem after efficiency ranking; 0 disables',
+  )
+  parser.add_argument(
+      '--max_progress_positives_per_type',
+      type=int,
+      default=0,
+      help='cap weak positives per construction type after efficiency ranking; 0 disables',
+  )
+  parser.add_argument(
+      '--solved_positive_repeat',
+      type=int,
+      default=1,
+      help='duplicate exact solved-positive rows before writing value data',
+  )
+  parser.add_argument(
       '--include_unevaluated_valid',
       action='store_true',
       help='keep valid candidates without a DDAR result as negatives',
@@ -161,6 +194,95 @@ def parse_args() -> argparse.Namespace:
   return parser.parse_args()
 
 
+def is_progress_positive_candidate(
+    added_dependencies: int,
+    progress_delta: int,
+    candidate_elapsed: Any,
+    args: argparse.Namespace,
+) -> bool:
+  if added_dependencies < args.progress_positive_min_added_dependencies:
+    return False
+  if progress_delta < args.progress_positive_min_root_delta:
+    return False
+  if args.progress_positive_max_elapsed_sec > 0:
+    if (
+        not isinstance(candidate_elapsed, (int, float))
+        or candidate_elapsed > args.progress_positive_max_elapsed_sec
+    ):
+      return False
+  if args.progress_positive_min_efficiency > 0:
+    elapsed = numeric(candidate_elapsed, default=0.0)
+    if (
+        elapsed <= 0
+        or progress_delta / max(elapsed, 1.0)
+        < args.progress_positive_min_efficiency
+    ):
+      return False
+  return True
+
+
+def progress_rank_key(row: dict[str, Any]) -> tuple[float, float, float]:
+  delta = numeric(row.get('progress_delta_dependencies'))
+  elapsed = numeric(row.get('candidate_elapsed_sec'), default=0.0)
+  efficiency = delta / max(elapsed, 1.0) if elapsed >= 0 else 0.0
+  added = numeric(row.get('candidate_added_dependencies'))
+  return (efficiency, delta, added)
+
+
+def rebalance_value_records(
+    records: list[dict[str, Any]], args: argparse.Namespace
+) -> list[dict[str, Any]]:
+  """Keep exact solved rows strong and demote excess weak progress positives."""
+  progress_rows = [
+      row for row in records if row.get('reason') == 'ddar_progress_positive'
+  ]
+  allowed_progress_ids: set[int] | None = None
+  if (
+      args.max_progress_positives_per_problem > 0
+      or args.max_progress_positives_per_type > 0
+  ):
+    allowed_progress_ids = set()
+    by_problem: dict[str, int] = {}
+    by_type: dict[str, int] = {}
+    for row in sorted(progress_rows, key=progress_rank_key, reverse=True):
+      problem = str(row.get('problem') or '')
+      construction_type = str(row.get('construction_type') or 'unknown')
+      if (
+          args.max_progress_positives_per_problem > 0
+          and by_problem.get(problem, 0) >= args.max_progress_positives_per_problem
+      ):
+        continue
+      if (
+          args.max_progress_positives_per_type > 0
+          and by_type.get(construction_type, 0) >= args.max_progress_positives_per_type
+      ):
+        continue
+      allowed_progress_ids.add(id(row))
+      by_problem[problem] = by_problem.get(problem, 0) + 1
+      by_type[construction_type] = by_type.get(construction_type, 0) + 1
+
+  output = []
+  solved_repeat = max(1, args.solved_positive_repeat)
+  for row in records:
+    if (
+        row.get('reason') == 'ddar_progress_positive'
+        and allowed_progress_ids is not None
+        and id(row) not in allowed_progress_ids
+    ):
+      row = dict(row)
+      row['label'] = 0
+      row['reason'] = 'progress_positive_demoted_by_cap'
+    if row.get('reason') in {'solved_aux', 'candidate_solved'} and int(row.get('label', 0)):
+      for repeat_index in range(solved_repeat):
+        repeated = dict(row)
+        if repeat_index:
+          repeated['line_no'] = f"{row.get('line_no')}::solved_repeat{repeat_index}"
+        output.append(repeated)
+    else:
+      output.append(row)
+  return output
+
+
 def main() -> None:
   args = parse_args()
   qs = import_search(args.script_dir)
@@ -169,125 +291,144 @@ def main() -> None:
   out_path = Path(args.out_file)
   out_path.parent.mkdir(parents=True, exist_ok=True)
   counts: dict[str, int] = {}
-  written = 0
-  with out_path.open('w', encoding='utf-8') as out:
-    for path in sorted(events_dir.glob('*.jsonl')):
-      problem = safe_problem_from_path(path)
-      candidates = []
-      ddar_results: dict[tuple[int | None, str], dict[str, Any]] = {}
-      ddar_errors: dict[tuple[int | None, str], dict[str, Any]] = {}
-      filtered_events: dict[tuple[int | None, str], dict[str, Any]] = {}
-      root_ddar: dict[str, Any] = {}
-      for line_no, event in read_event_file(path):
-        kind = event.get('kind')
-        if kind == 'candidate':
-          candidates.append((line_no, event))
-        elif kind == 'ddar_done':
-          tag = event.get('tag') or ''
-          if tag == 'root':
-            root_ddar = event
-          parsed = parse_ddar_candidate_tag(tag)
-          if parsed is not None:
-            ddar_results[parsed] = event
-        elif kind == 'candidate_ddar_error':
-          raw = event.get('raw') or ''
-          key = candidate_key(event.get('depth'), raw)
-          ddar_errors[key] = event
-        elif kind == 'candidate_filtered':
-          raw = event.get('raw') or ''
-          reason = event.get('reason') or ''
-          if raw and reason == 'duplicate_canonical':
-            key = candidate_key(event.get('depth'), raw)
-            filtered_events[key] = event
-      for line_no, event in candidates:
+  records: list[dict[str, Any]] = []
+  for path in sorted(events_dir.glob('*.jsonl')):
+    problem = safe_problem_from_path(path)
+    candidates = []
+    ddar_results: dict[tuple[int | None, str], dict[str, Any]] = {}
+    ddar_errors: dict[tuple[int | None, str], dict[str, Any]] = {}
+    filtered_events: dict[tuple[int | None, str], dict[str, Any]] = {}
+    root_ddar: dict[str, Any] = {}
+    for line_no, event in read_event_file(path):
+      kind = event.get('kind')
+      if kind == 'candidate':
+        candidates.append((line_no, event))
+      elif kind == 'ddar_done':
+        tag = event.get('tag') or ''
+        if tag == 'root':
+          root_ddar = event
+        parsed = parse_ddar_candidate_tag(tag)
+        if parsed is not None:
+          ddar_results[parsed] = event
+      elif kind == 'candidate_ddar_error':
         raw = event.get('raw') or ''
-        translation = event.get('translation') or ''
-        reason = classify_error(translation)
-        row_summary = summary.get(problem, {})
-        solved_aux = row_summary.get('aux') or ''
-        solved = bool(row_summary.get('solved'))
         key = candidate_key(event.get('depth'), raw)
-        ddar = ddar_results.get(key, {})
-        ddar_error = ddar_errors.get(key, {})
-        filtered_event = filtered_events.get(key, {})
-        added_dependencies = int(ddar.get('added_dependencies') or 0)
-        root_added_dependencies = int(root_ddar.get('added_dependencies') or 0)
-        progress_delta = added_dependencies - root_added_dependencies
-        candidate_solved = bool(ddar.get('solved'))
-        candidate_elapsed = ddar.get('elapsed_sec')
-        if (
-            reason == 'not_error'
-            and not ddar
-            and not ddar_error
-            and not filtered_event
-            and not args.include_unevaluated_valid
-        ):
-          continue
-        label = 0
-        if (
-            reason == 'not_error'
-            and solved
-            and solved_aux
-            and qs.canonical_aux_key(translation) == qs.canonical_aux_key(solved_aux)
-        ):
-          label = 1
-          reason = 'solved_aux'
-        elif reason == 'not_error' and candidate_solved:
-          label = 1
-          reason = 'candidate_solved'
-        elif reason == 'not_error' and ddar_error:
-          reason = 'candidate_ddar_error'
-        elif reason == 'not_error' and filtered_event:
-          reason = filtered_event.get('reason') or 'candidate_filtered'
-        elif (
-            reason == 'not_error'
-            and not args.disable_progress_positives
-            and added_dependencies >= args.progress_positive_min_added_dependencies
-            and progress_delta >= args.progress_positive_min_root_delta
-            and (
-                args.progress_positive_max_elapsed_sec <= 0
-                or (
-                    isinstance(candidate_elapsed, (int, float))
-                    and candidate_elapsed <= args.progress_positive_max_elapsed_sec
-                )
-            )
-        ):
-          label = 1
-          reason = 'ddar_progress_positive'
-        elif reason == 'not_error' and solved:
-          reason = 'valid_nonwinning'
-        elif reason == 'not_error':
-          reason = 'valid_but_unsolved'
-        record = {
-            'problem': problem,
-            'event_file': str(path),
-            'line_no': line_no,
-            'depth': event.get('depth'),
-            'raw': raw,
-            'translation': translation,
-            'source': event.get('source') or event.get('candidate_source') or 'lm',
-            'construction_type': inferred_construction_type(qs, raw, translation),
-            'label': label,
-            'reason': reason,
-            'filtered_reason': filtered_event.get('reason'),
-            'canonical_key': filtered_event.get('canonical_key'),
-            'problem_solved': solved,
-            'candidate_solved': candidate_solved,
-            'candidate_ddar_status': ddar.get('status'),
-            'candidate_ddar_error': ddar_error.get('error'),
-            'candidate_added_dependencies': added_dependencies,
-            'root_added_dependencies': root_added_dependencies,
-            'progress_delta_dependencies': progress_delta,
-            'candidate_levels': ddar.get('levels'),
-            'candidate_elapsed_sec': candidate_elapsed or ddar_error.get('elapsed_sec'),
-            'split': split_for_problem(problem, args.eval_mod),
-        }
-        out.write(json.dumps(record, ensure_ascii=False) + '\n')
-        counts[f'label_{label}'] = counts.get(f'label_{label}', 0) + 1
-        counts[reason] = counts.get(reason, 0) + 1
-        counts[record['split']] = counts.get(record['split'], 0) + 1
-        written += 1
-  print(json.dumps({'out_file': str(out_path), 'rows': written, 'counts': counts}, ensure_ascii=False, indent=2))
+        ddar_errors[key] = event
+      elif kind == 'candidate_filtered':
+        raw = event.get('raw') or ''
+        reason = event.get('reason') or ''
+        if raw and reason == 'duplicate_canonical':
+          key = candidate_key(event.get('depth'), raw)
+          filtered_events[key] = event
+    for line_no, event in candidates:
+      raw = event.get('raw') or ''
+      translation = event.get('translation') or ''
+      reason = classify_error(translation)
+      row_summary = summary.get(problem, {})
+      solved_aux = row_summary.get('aux') or ''
+      solved = bool(row_summary.get('solved'))
+      key = candidate_key(event.get('depth'), raw)
+      ddar = ddar_results.get(key, {})
+      ddar_error = ddar_errors.get(key, {})
+      filtered_event = filtered_events.get(key, {})
+      added_dependencies = int(ddar.get('added_dependencies') or 0)
+      root_added_dependencies = int(root_ddar.get('added_dependencies') or 0)
+      progress_delta = added_dependencies - root_added_dependencies
+      candidate_solved = bool(ddar.get('solved'))
+      candidate_elapsed = ddar.get('elapsed_sec')
+      if (
+          reason == 'not_error'
+          and not ddar
+          and not ddar_error
+          and not filtered_event
+          and not args.include_unevaluated_valid
+      ):
+        continue
+      label = 0
+      if (
+          reason == 'not_error'
+          and solved
+          and solved_aux
+          and qs.canonical_aux_key(translation) == qs.canonical_aux_key(solved_aux)
+      ):
+        label = 1
+        reason = 'solved_aux'
+      elif reason == 'not_error' and candidate_solved:
+        label = 1
+        reason = 'candidate_solved'
+      elif reason == 'not_error' and ddar_error:
+        reason = 'candidate_ddar_error'
+      elif reason == 'not_error' and filtered_event:
+        reason = filtered_event.get('reason') or 'candidate_filtered'
+      elif (
+          reason == 'not_error'
+          and not args.disable_progress_positives
+          and is_progress_positive_candidate(
+              added_dependencies,
+              progress_delta,
+              candidate_elapsed,
+              args,
+          )
+      ):
+        label = 1
+        reason = 'ddar_progress_positive'
+      elif reason == 'not_error' and solved:
+        reason = 'valid_nonwinning'
+      elif reason == 'not_error':
+        reason = 'valid_but_unsolved'
+      records.append({
+          'problem': problem,
+          'event_file': str(path),
+          'line_no': line_no,
+          'depth': event.get('depth'),
+          'raw': raw,
+          'translation': translation,
+          'source': event.get('source') or event.get('candidate_source') or 'lm',
+          'construction_type': inferred_construction_type(qs, raw, translation),
+          'label': label,
+          'reason': reason,
+          'filtered_reason': filtered_event.get('reason'),
+          'canonical_key': filtered_event.get('canonical_key'),
+          'problem_solved': solved,
+          'candidate_solved': candidate_solved,
+          'candidate_ddar_status': ddar.get('status'),
+          'candidate_ddar_error': ddar_error.get('error'),
+          'candidate_added_dependencies': added_dependencies,
+          'root_added_dependencies': root_added_dependencies,
+          'progress_delta_dependencies': progress_delta,
+          'candidate_levels': ddar.get('levels'),
+          'candidate_elapsed_sec': candidate_elapsed or ddar_error.get('elapsed_sec'),
+          'split': split_for_problem(problem, args.eval_mod),
+      })
+  rows_before_rebalance = len(records)
+  records = rebalance_value_records(records, args)
+  with out_path.open('w', encoding='utf-8') as out:
+    for record in records:
+      out.write(json.dumps(record, ensure_ascii=False) + '\n')
+      label = int(record.get('label', 0))
+      reason = record.get('reason') or 'unknown'
+      counts[f'label_{label}'] = counts.get(f'label_{label}', 0) + 1
+      counts[reason] = counts.get(reason, 0) + 1
+      counts[record['split']] = counts.get(record['split'], 0) + 1
+  print(json.dumps({
+      'out_file': str(out_path),
+      'rows': len(records),
+      'rows_before_rebalance': rows_before_rebalance,
+      'counts': counts,
+      'filters': {
+          'progress_positive_min_added_dependencies': (
+              args.progress_positive_min_added_dependencies
+          ),
+          'progress_positive_min_root_delta': args.progress_positive_min_root_delta,
+          'progress_positive_max_elapsed_sec': args.progress_positive_max_elapsed_sec,
+          'progress_positive_min_efficiency': args.progress_positive_min_efficiency,
+          'max_progress_positives_per_problem': (
+              args.max_progress_positives_per_problem
+          ),
+          'max_progress_positives_per_type': args.max_progress_positives_per_type,
+          'solved_positive_repeat': max(1, args.solved_positive_repeat),
+      },
+  }, ensure_ascii=False, indent=2))
 
 
 if __name__ == '__main__':

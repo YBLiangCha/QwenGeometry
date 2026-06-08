@@ -1384,10 +1384,13 @@ def solve_one(
     )
 
   def type_bonus_context() -> dict[str, float]:
+    dynamic_context = dynamic_progress_type_bonuses
+    if hasattr(qs, 'expanded_dynamic_type_bonus'):
+      dynamic_context = qs.expanded_dynamic_type_bonus(dynamic_progress_type_bonuses)
     return merge_type_bonus_maps(
         static_progress_type_bonuses,
         problem_static_progress_type_bonuses,
-        dynamic_progress_type_bonuses,
+        dynamic_context,
     )
 
   def preferred_construction_types(limit: int) -> list[str]:

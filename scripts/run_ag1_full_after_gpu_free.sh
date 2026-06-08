@@ -10,6 +10,7 @@ LOG=${LOG:-$ROOT/ag1_full_b32_beam512_depth16_clean_v1.nohup.log}
 MIN_FREE_MEM_MB=${MIN_FREE_MEM_MB:-28000}
 POLL_SECONDS=${POLL_SECONDS:-120}
 STABLE_POLLS=${STABLE_POLLS:-3}
+QWEN_ACTIVE_PATTERN=${QWEN_ACTIVE_PATTERN:-run_qwen_ag_benchmark.py|train_qwen_aux_lora.py|run_postrun_candidate_signal_sft_and_clean_rerun.sh|run_pairwise_scout_after_clean_wait.sh|run_postv12_solvedbiased_hybrid_after_wait.sh}
 
 BATCH_SIZE=${BATCH_SIZE:-32}
 BEAM_SIZE=${BEAM_SIZE:-512}
@@ -21,7 +22,7 @@ echo "[ag1-full] waiting for GPU free: min_free=${MIN_FREE_MEM_MB}MB stable_poll
 stable=0
 while true; do
   free_mem=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | head -1 | tr -d ' ')
-  qwen_pids=$(pgrep -f 'run_qwen_ag_benchmark.py' | paste -sd, - || true)
+  qwen_pids=$(pgrep -f "$QWEN_ACTIVE_PATTERN" | paste -sd, - || true)
   now=$(date -Is)
   echo "[ag1-full] $now free_mem_mb=${free_mem:-unknown} qwen_pids=${qwen_pids:-none} stable=$stable" | tee -a "$LOG"
 

@@ -122,11 +122,16 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     # IMO 2018 P1 current trace: strongest DDAR-progress candidate uses
     # on_circle+on_tline (delta 193), so reserve coverage before it is solved.
     'on_circle+on_tline': 2.4,
+    # Same trace shows these families adding large DDAR fact deltas but they
+    # were not protected by the previous anchor set.
+    'on_bline+on_tline': 2.3,
+    'eqdistance+on_circum': 2.2,
     'on_bline+on_circle': 2.3,
     'on_circle+on_line': 2.3,
     'on_circle+on_dia': 2.2,
     'on_circle+on_circum': 2.1,
     'on_circle+on_pline': 2.0,
+    'eqdistance+on_bline': 2.0,
     'on_circum+on_tline': 2.0,
     # Newly solved IMO 2015 P3 used on_line+on_circum; keep this family near
     # other solved/progress-positive two-construction combos.
@@ -166,14 +171,18 @@ _SIGNAL_ANCHOR_TYPE_BONUS = {
     'on_circle+on_circum': 3.5,
     'eqangle3': 3.4,
     'on_circle+on_tline': 3.4,
+    'on_bline+on_tline': 3.3,
     'on_circum+on_circum': 3.4,
     'on_circum+on_line': 5.6,
     'on_bline': 3.2,
     'on_bline+on_circle': 3.2,
+    'eqdistance+on_circum': 3.1,
+    'on_circle+on_pline': 3.1,
     'on_tline+on_tline': 3.1,
     'eqdistance+on_line': 3.0,
     'on_bline+on_bline': 3.0,
     'eqdistance+on_circle': 2.9,
+    'eqdistance+on_bline': 2.8,
     'on_dia': 2.8,
     'eqdistance': 2.7,
     'on_line+on_pline': 2.7,

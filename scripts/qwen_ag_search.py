@@ -370,11 +370,16 @@ def candidate_dsl_shape_error(text: str) -> str | None:
     if not parts or len(parts) > 2:
       return 'invalid_construction_count'
     binds_output = False
+    seen_parts: set[tuple[str, ...]] = set()
     for part in parts:
       toks = part.split()
       if len(toks) < 2:
         return 'empty_construction'
       name, args = toks[0], toks[1:]
+      signature = tuple([name] + args)
+      if signature in seen_parts:
+        return 'duplicate_construction'
+      seen_parts.add(signature)
       if not _DSL_WORD_RE.match(name):
         return 'invalid_construction_name'
       arity = _CONSTRUCTIVE_ARG_ARITY.get(name)
@@ -409,10 +414,15 @@ def candidate_dsl_shape_error(text: str) -> str | None:
       prems[-1].append(tok)
   if not prems or len(prems) > 2:
     return 'invalid_predicate_count'
+  seen_prems: set[tuple[str, ...]] = set()
   for prem in prems:
     if not prem:
       return 'empty_predicate'
     name, args = prem[0], prem[1:]
+    signature = tuple([name] + args)
+    if signature in seen_prems:
+      return 'duplicate_predicate'
+    seen_prems.add(signature)
     if name not in _CONSTRAINED_PREDICATE_ARITY:
       return 'unknown_predicate'
     if not _arity_ok(len(args), _CONSTRAINED_PREDICATE_ARITY[name]):
@@ -499,6 +509,7 @@ def _parse_constrained_prefix(
   if not tokens:
     return 'possible'
   prem_count = 1
+  seen_prems: set[tuple[str, ...]] = set()
   index = 0
   while index < len(tokens):
     if prem_count > 2:
@@ -526,6 +537,10 @@ def _parse_constrained_prefix(
           return 'invalid'
         if not _predicate_args_shape_ok(point, pred, args):
           return 'invalid'
+        signature = tuple([pred] + args)
+        if signature in seen_prems:
+          return 'invalid'
+        seen_prems.add(signature)
         index += 1
         if index >= len(tokens):
           return 'possible'
@@ -547,6 +562,9 @@ def _parse_constrained_prefix(
           return 'invalid'
         if not _predicate_args_shape_ok(point, pred, args):
           return 'invalid'
+        signature = tuple([pred] + args)
+        if signature in seen_prems:
+          return 'invalid'
         return 'complete'
       return 'possible'
 
@@ -554,6 +572,9 @@ def _parse_constrained_prefix(
       if not _arity_accepts(len(args), arity) or point not in args:
         return 'invalid'
       if not _predicate_args_shape_ok(point, pred, args):
+        return 'invalid'
+      signature = tuple([pred] + args)
+      if signature in seen_prems:
         return 'invalid'
       return 'complete'
   return 'possible'
@@ -569,6 +590,7 @@ def _parse_constructive_prefix(
     return 'possible'
   construction_count = 1
   binds_output = False
+  seen_constructions: set[tuple[str, ...]] = set()
   index = 0
   while index < len(tokens):
     if construction_count > 2:
@@ -612,6 +634,9 @@ def _parse_constructive_prefix(
         current_binds_output = _construction_binds_output(point, name, args)
         if construction_count > 1 and not (binds_output or current_binds_output):
           return 'invalid'
+        signature = tuple([name] + args)
+        if signature in seen_constructions:
+          return 'invalid'
         return (
             'complete'
             if _construction_args_shape_ok(point, name, args)
@@ -624,6 +649,10 @@ def _parse_constructive_prefix(
         return 'invalid'
       if not _construction_args_shape_ok(point, name, args):
         return 'invalid'
+      signature = tuple([name] + args)
+      if signature in seen_constructions:
+        return 'invalid'
+      seen_constructions.add(signature)
       binds_output = binds_output or _construction_binds_output(point, name, args)
       construction_count += 1
       index += 1
@@ -635,6 +664,9 @@ def _parse_constructive_prefix(
         return 'invalid'
       current_binds_output = _construction_binds_output(point, name, args)
       if construction_count > 1 and not (binds_output or current_binds_output):
+        return 'invalid'
+      signature = tuple([name] + args)
+      if signature in seen_constructions:
         return 'invalid'
       return (
           'complete' if _construction_args_shape_ok(point, name, args) else 'invalid'

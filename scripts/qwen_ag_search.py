@@ -93,6 +93,19 @@ _VERIFIER_PRIOR_TYPE_BONUS = {
     'on_circle+on_dia': 1.0,
     'on_circle+on_tline': 1.0,
     'on_circum+on_tline': 1.0,
+    # High-progress combo families from the full reference trace. They are
+    # sparse enough that a small verifier prior improves coverage without
+    # flooding the depth evaluator.
+    'on_circum+on_pline': 0.9,
+    'eqdistance+on_circum': 0.8,
+    'on_bline+on_tline': 0.8,
+    'on_line+on_pline': 0.8,
+    'on_pline+on_tline': 0.7,
+    'eqdistance+on_bline': 0.7,
+    'eqdistance+on_pline': 0.6,
+    'on_pline+on_pline': 0.6,
+    'on_dia+on_dia': 0.5,
+    'on_aline+on_tline': 0.5,
     'on_circum+on_line': 0.9,
     'on_line+on_tline': 0.9,
     'on_line+on_line': 0.9,
@@ -147,6 +160,7 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     # Large DDAR-progress families mined from the full v12 reference trace but
     # missing from the earlier progress coverage map.
     'on_circum+on_pline': 2.4,
+    'on_line+on_pline': 1.9,
     'on_pline+on_pline': 1.8,
     'on_aline+on_tline': 1.8,
     'eqdistance+on_pline': 1.6,
@@ -157,6 +171,7 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     'on_dia+on_line': 1.7,
     'on_circum+on_circum': 1.5,
     'on_aline+on_circle': 1.5,
+    'on_circle+on_circle': 1.4,
     'angle_bisector': 1.4,
     # Single-construction families are noisy, so keep these below the
     # progress-positive combos and let the adaptive value score decide.
@@ -213,7 +228,12 @@ _SIGNAL_ANCHOR_TYPE_BONUS = {
     'eqdistance+on_bline': 2.8,
     'on_dia': 2.8,
     'eqdistance': 2.7,
-    'on_line+on_pline': 2.7,
+    'on_line+on_pline': 3.0,
+    'on_circle+on_circle': 2.8,
+    'on_pline+on_pline': 2.8,
+    'eqdistance+on_pline': 2.7,
+    'on_dia+on_dia': 2.5,
+    'on_aline+on_tline': 2.5,
     'on_aline': 2.6,
     'on_line': 2.5,
     'on_pline': 2.3,

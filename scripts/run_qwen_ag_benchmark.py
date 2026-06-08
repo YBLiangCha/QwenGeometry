@@ -858,6 +858,7 @@ def post_canonical_template_backfill(
     pr: Any,
     pt: Any,
     preferred_points: set[str] | None = None,
+    preferred_construction_types: list[str] | None = None,
 ) -> None:
   if len(translated_candidates) >= target_count:
     return
@@ -866,7 +867,11 @@ def post_canonical_template_backfill(
   needed = target_count - len(translated_candidates)
   template_budget = max(target_count * 32, needed * 16, 128)
   for raw in qs.template_backfill_candidates(
-      forbidden_points, template_budget, seen_candidate_keys, preferred_points
+      forbidden_points,
+      template_budget,
+      seen_candidate_keys,
+      preferred_points,
+      preferred_construction_types,
   ):
     attempted += 1
     if raw in seen_raw:
@@ -1299,6 +1304,15 @@ def solve_one(
         dynamic_progress_type_bonuses,
     )
 
+  def preferred_template_construction_types(limit: int = 12) -> list[str]:
+    scored = []
+    for typ, score in type_bonus_context().items():
+      try:
+        scored.append((float(score), typ))
+      except (TypeError, ValueError):
+        continue
+    return [typ for _, typ in sorted(scored, reverse=True)[:limit]]
+
   for depth in range(args.search_depth):
     qs.event(events_file, kind='depth_start', depth=depth, nodes=len(beam))
     next_beam = qs.BeamQueue(args.beam_size)
@@ -1354,6 +1368,7 @@ def solve_one(
               needed * 4,
               seen_generation_keys if args.candidate_canonical_dedup else None,
               qs.goal_point_names(p_cur),
+              preferred_template_construction_types(),
           ):
             generation_key = qs.candidate_generation_dedup_key(raw)
             if raw not in seen_raw and generation_key not in seen_generation_keys:
@@ -1439,6 +1454,7 @@ def solve_one(
               pr,
               pt,
               qs.goal_point_names(p_cur),
+              preferred_template_construction_types(),
           )
         ranked_node_candidates = qs.rerank_candidate_records(
             translated_candidates,
@@ -2013,6 +2029,7 @@ def solve_one(
             needed * 4,
             seen_generation_keys if args.candidate_canonical_dedup else None,
             qs.goal_point_names(p_cur),
+            preferred_template_construction_types(),
         ):
           generation_key = qs.candidate_generation_dedup_key(raw)
           if raw not in seen_raw and generation_key not in seen_generation_keys:
@@ -2099,6 +2116,7 @@ def solve_one(
             pr,
             pt,
             qs.goal_point_names(p_cur),
+            preferred_template_construction_types(),
         )
       ranked_candidates = qs.rerank_candidate_records(
           translated_candidates,

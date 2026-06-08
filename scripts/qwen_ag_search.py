@@ -900,6 +900,7 @@ def template_backfill_candidates(
     max_candidates: int,
     excluded_canonical_keys: set[str] | None = None,
     preferred_points: set[str] | None = None,
+    preferred_construction_types: list[str] | None = None,
 ) -> list[str]:
   """Generate type-diverse DSL candidates from simple construction templates."""
   if not point_names or max_candidates <= 0:
@@ -911,7 +912,39 @@ def template_backfill_candidates(
   pts = sorted(point_names, key=lambda point: (point not in preferred_points, point))
   if not new_point or len(pts) < 3:
     return []
-  buckets: list[list[str]] = [[] for _ in range(30)]
+  bucket_types = [
+      'on_line',
+      'on_line+on_line',
+      'on_circum',
+      'on_pline',
+      'on_tline',
+      'eqdistance',
+      'on_circle',
+      'on_bline',
+      'on_bline+on_line',
+      'on_dia',
+      'angle_bisector',
+      'angle_mirror',
+      'on_dia+on_line',
+      'on_aline',
+      'on_aline2',
+      'eqangle3',
+      'on_circle+on_line',
+      'on_circum+on_line',
+      'on_circum+on_circum',
+      'on_tline+on_tline',
+      'on_circle+on_tline',
+      'eqdistance+on_line',
+      'on_circum+on_tline',
+      'eqdistance+on_tline',
+      'on_bline+on_circle',
+      'on_bline+on_bline',
+      'eqdistance+on_circle',
+      'on_dia+on_tline',
+      'on_bline+on_tline',
+      'unknown',
+  ]
+  buckets: list[list[str]] = [[] for _ in bucket_types]
   seen_canonical: set[str] = set()
 
   def prefer_key(item: tuple[str, ...]) -> tuple[int, tuple[str, ...]]:
@@ -1043,9 +1076,20 @@ def template_backfill_candidates(
 
   candidates: list[str] = []
   positions = [0 for _ in buckets]
+  preferred_rank = {
+      typ: index for index, typ in enumerate(preferred_construction_types or [])
+  }
+  bucket_order = sorted(
+      range(len(buckets)),
+      key=lambda index: (
+          preferred_rank.get(bucket_types[index], len(preferred_rank) + index),
+          index,
+      ),
+  )
   while len(candidates) < max_candidates:
     progressed = False
-    for bucket_idx, bucket in enumerate(buckets):
+    for bucket_idx in bucket_order:
+      bucket = buckets[bucket_idx]
       pos = positions[bucket_idx]
       if pos < len(bucket):
         candidates.append(bucket[pos])

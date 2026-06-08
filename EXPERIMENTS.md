@@ -1039,6 +1039,21 @@ changes. Tags are the practical version identifiers for this workspace.
   low-rank tail slot or a timeout fallback branch, the report should make that
   visible immediately instead of requiring manual event-log reconstruction.
 
+### `v22tail_short_output_tags_v1`
+
+- Shortened the default v22tail scout and clean rerun tags:
+  - scout:
+    `unsolved_v22tail_scout_d16_tc4_tail${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}_fact12_t160_w100_fb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}append_v1`
+  - clean:
+    `unsolved_v22tail_stage4_d24_tc6_tail${CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}_fact12_t200_w120_fb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}append_v1`
+- Reason: the previous clean default produced a
+  `final_eval_imo_ag30_qwen_...` directory component of length 260, which
+  exceeds the Linux 255-byte filename limit and could stop the queued v22tail
+  run before it starts.  The new clean component length is 92 with default
+  parameters.
+- Full parameter values remain in queue/run logs, so shorter output tags do not
+  lose experiment provenance.
+
 ## Versioning Rule
 
 - Do not overwrite completed output directories.

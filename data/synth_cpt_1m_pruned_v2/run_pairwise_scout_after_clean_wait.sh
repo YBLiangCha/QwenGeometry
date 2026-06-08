@@ -27,6 +27,15 @@ VALUE_MODEL=${VALUE_MODEL:-outputs/candidate_value_model_v16_pairwise_solved_bia
 SECONDARY_VALUE_MODEL=${SECONDARY_VALUE_MODEL:-outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1/candidate_value_model.json}
 SCOUT_RERANK=${SCOUT_RERANK:-value_model_frontfill_diverse}
 SCOUT_FRONTFILL_LIMIT=${SCOUT_FRONTFILL_LIMIT:-12}
+TRAIN_SCOUT_VALUE_MODEL=${TRAIN_SCOUT_VALUE_MODEL:-0}
+VALUE_MODEL_APPEND_SCRIPT=${VALUE_MODEL_APPEND_SCRIPT:-$SCRIPT_DIR/../data/synth_cpt_1m_pruned_v2/run_value_model_append_partial.sh}
+SCOUT_VALUE_TAG=${SCOUT_VALUE_TAG:-v17_pairwise_postv12_full_timeoutfb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}_v1}
+SCOUT_VALUE_OUT_DIR=${SCOUT_VALUE_OUT_DIR:-outputs/candidate_value_model_${SCOUT_VALUE_TAG}}
+BASE_VALUE_DATA=${BASE_VALUE_DATA:-outputs/candidate_value_model_v16_pairwise_solved_biased_progress_filter_oldfull_current4_v1/candidate_value_data.jsonl}
+SCOUT_VALUE_TRAIN_EXTRA_ARGS=${SCOUT_VALUE_TRAIN_EXTRA_ARGS:-}
+if [ -z "$SCOUT_VALUE_TRAIN_EXTRA_ARGS" ]; then
+  SCOUT_VALUE_TRAIN_EXTRA_ARGS="--objective pairwise --train_valid_only --epochs 20 --lr 0.01 --pairwise_negatives_per_positive 16"
+fi
 
 SCOUT_CANDIDATE_EVAL_LIMIT=${SCOUT_CANDIDATE_EVAL_LIMIT:-0}
 SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT:-16}
@@ -137,6 +146,25 @@ if [ -e "$SCOUT_OUT_DIR/summary.jsonl" ]; then
   echo "scout output already exists: $SCOUT_OUT_DIR" | tee -a "$SCOUT_QUEUE_LOG" >&2
   exit 1
 fi
+
+if [ "$TRAIN_SCOUT_VALUE_MODEL" = "1" ]; then
+  log "training refreshed scout value model: $SCOUT_VALUE_TAG"
+  env \
+    SCRIPT_DIR="$SCRIPT_DIR" \
+    VALUE_TAG="$SCOUT_VALUE_TAG" \
+    OUT_DIR="$SCOUT_VALUE_OUT_DIR" \
+    BASE_VALUE_DATA="$BASE_VALUE_DATA" \
+    PARTIAL_TAG="$(basename "$WAIT_OUT_DIR" | sed 's/^final_eval_imo_ag30_qwen_//')" \
+    PARTIAL_OUT_DIR="$WAIT_OUT_DIR" \
+    PARTIAL_EVENTS_DIR="$WAIT_OUT_DIR/events" \
+    PARTIAL_SUMMARY_JSONL="$WAIT_SUMMARY_JSONL" \
+    VALUE_TRAIN_EXTRA_ARGS="$SCOUT_VALUE_TRAIN_EXTRA_ARGS" \
+    bash "$VALUE_MODEL_APPEND_SCRIPT" \
+    >> "$SCOUT_QUEUE_LOG" 2>&1
+  VALUE_MODEL="$SCOUT_VALUE_OUT_DIR/candidate_value_model.json"
+  log "refreshed scout value model ready: $VALUE_MODEL"
+fi
+
 if [ ! -s "$VALUE_MODEL" ]; then
   echo "missing VALUE_MODEL: $VALUE_MODEL" | tee -a "$SCOUT_QUEUE_LOG" >&2
   exit 1
@@ -150,7 +178,7 @@ if [ ! -s "$ADAPTER_PATH/adapter_model.safetensors" ]; then
   exit 1
 fi
 
-log "starting v16 pairwise scout: $SCOUT_TAG"
+log "starting pairwise scout: $SCOUT_TAG"
 log "problem_names=$SCOUT_PROBLEM_NAMES"
 log "depth_eval_limit=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate_timeout=${SCOUT_CANDIDATE_DDAR_TIMEOUT}; wall_timeout=${SCOUT_CANDIDATE_WALL_TIMEOUT}; workers=${SCOUT_CANDIDATE_DDAR_WORKERS}; timeout_beam_fallback=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}; rerank=${SCOUT_RERANK}; frontfill=${SCOUT_FRONTFILL_LIMIT}; value_model=$VALUE_MODEL; secondary_value_model=$SECONDARY_VALUE_MODEL"
 
@@ -209,4 +237,4 @@ xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchm
   --lm_fact_context_top_k 8 \
   >> "$SCOUT_LOG" 2>&1
 
-log "v16 pairwise scout finished: $SCOUT_TAG"
+log "pairwise scout finished: $SCOUT_TAG"

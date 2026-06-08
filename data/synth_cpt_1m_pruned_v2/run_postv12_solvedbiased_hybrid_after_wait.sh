@@ -29,7 +29,9 @@ POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v1}
 SFT_OUT=${SFT_OUT:-outputs/stage4_candidate_signal_solvedbiased_after_v12_${POSTRUN_TAG}}
 BASE_ADAPTER=${BASE_ADAPTER:-outputs/stage3_candidate_signal_after_factctx_lora_qwen2_5_7b_candidate_signal_sft_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_postrun_value_v12_default_v1}
 
-VALUE_MODEL=${VALUE_MODEL:-outputs/candidate_value_model_v16_pairwise_solved_biased_progress_filter_oldfull_current4_v1/candidate_value_model.json}
+PREFERRED_VALUE_MODEL=${PREFERRED_VALUE_MODEL:-outputs/candidate_value_model_v17_pairwise_postv12_full_timeoutfb4_v1/candidate_value_model.json}
+FALLBACK_VALUE_MODEL=${FALLBACK_VALUE_MODEL:-outputs/candidate_value_model_v16_pairwise_solved_biased_progress_filter_oldfull_current4_v1/candidate_value_model.json}
+VALUE_MODEL=${VALUE_MODEL:-$PREFERRED_VALUE_MODEL}
 CLEAN_SECONDARY_VALUE_MODEL=${CLEAN_SECONDARY_VALUE_MODEL:-outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1/candidate_value_model.json}
 CLEAN_CANDIDATE_RERANK=${CLEAN_CANDIDATE_RERANK:-value_model_frontfill_diverse}
 CLEAN_FRONTFILL_LIMIT=${CLEAN_FRONTFILL_LIMIT:-12}
@@ -117,6 +119,15 @@ if [ "$WAIT_FOR_SCOUT" = "1" ]; then
     log "hybrid scout still active or queued; summary rows=${scout_rows}"
     sleep "$WAIT_INTERVAL"
   done
+fi
+
+if [ ! -s "$VALUE_MODEL" ] && [ -s "$FALLBACK_VALUE_MODEL" ]; then
+  log "preferred value model missing, falling back: $FALLBACK_VALUE_MODEL"
+  VALUE_MODEL="$FALLBACK_VALUE_MODEL"
+fi
+if [ ! -s "$VALUE_MODEL" ]; then
+  echo "missing VALUE_MODEL for post-v12 clean rerun: $VALUE_MODEL" | tee -a "$QUEUE_LOG" >&2
+  exit 1
 fi
 
 CLEAN_PROBLEM_NAMES=$(python - "$REFERENCE_SUMMARY_JSONL" "$SCOUT_SUMMARY_JSONL" <<'PY'

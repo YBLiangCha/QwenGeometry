@@ -6,24 +6,23 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `wide_clean_rerun_queue_v1`
-- Current running bench tag:
-  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
-- Running bench code behavior: includes semantic point/predicate fixes through
-  `semantic_point_mask_v3`; it does not include later `semantic_point_mask_v4`
-  degenerate-construction filtering or candidate rerank-score event logging,
-  `template_backfill_seen_canonical_v1`, or
-  `duplicate_canonical_negative_signal_v1`, because the process was already
-  running when those commits were made.
-- Next clean code baseline for a rerun: source head
-  `value_model_v11_default_v1`, optionally with a new bench tag such
-  as
-  `unsolved_factctx_promptaug_top8_adapter_value_v11_grammar_semantic_v4_scores_dedup_dupneg_v1`.
-- Remote running-workspace scripts are intentionally not overwritten while
-  `unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
-  is active. The benchmark uses spawn-based candidate workers, so overwriting
-  `scripts/` mid-run could mix code versions in future workers. Sync the new
-  source after this run completes or immediately before launching the next tag.
+- Current GitHub source head: `postv12_decode_beam_limit_v1`
+  (`a1697a3`).
+- Current running v12 clean bench tag:
+  `unsolved_factctx_promptaug_top8_candidate_signal_postrun_value_v12_default_v1_depth48_t240_w150_nrs48_qm3_sigrep4_blinedia_statededup_nodediv_dsltpl_combotpl_rarecombo_vprior_v1`.
+- Current v12 clean source snapshot:
+  `/tmp/qwen_ag_scripts_c541dd4` (`value_v12_default_queue_v1`). This active
+  process is intentionally not overwritten.
+- Current waiting scout queue source:
+  `/tmp/qwen_ag_scripts_a1697a3`, tag
+  `unsolved_factctx_promptaug_top8_hybrid_v18_solvedonly_front12_v12_scout_after_v12_depth16_decbeam16_t160_w100_nrs48_qm3_timeoutfb4_beamscore_rerank_v1`.
+- Current waiting post-v12 stage4 queue source:
+  `/tmp/qwen_ag_scripts_a1697a3`, tag
+  `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v18_front12_beamscore_rerank_decbeam16_depth24_t200_w120_nrs48_qm3_timeoutfb4_v1`.
+- Running-workspace scripts are intentionally versioned in `/tmp` snapshots
+  rather than overwritten in-place. The benchmark uses spawn-based candidate
+  workers, so mixing source versions inside a long process can corrupt
+  attribution.
 
 ## Candidate Quality And Training Signals
 
@@ -699,6 +698,69 @@ changes. Tags are the practical version identifiers for this workspace.
 
 - Output: `outputs/stage3_candidate_signal_after_factctx_lora_qwen2_5_7b_candidate_signal_sft_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1`
 - Purpose: continue training from the prompt-aug fact-context adapter with positive candidate signals and optional hard-negative unlikelihood loss.
+
+## Post-v12 Queue Versions
+
+### `timeout_beam_fallback_v1`
+
+- Commit: `c99ca6c`.
+- Adds `--candidate_timeout_beam_fallback_limit`, defaulting to 0 for
+  compatibility.
+- Motivation: `translated_imo_2008_p6` in the v12 clean run had only 2 DDAR
+  completions, 95 candidate DDAR timeout errors, and then `beam_empty` at
+  depth 1. The fallback carries a small number of top timed-out candidates into
+  the next beam without fact context when no verified candidate survives.
+- Post-v12 queues use `timeoutfb4`; the active v12 clean process remains on
+  the older `c541dd4` source.
+
+### `postv12_refresh_value_model_v1`
+
+- Commit: `4985dd8`.
+- The waiting scout can train a refreshed pairwise value model after the full
+  v12 clean run completes, then use it as the primary frontfill reranker with
+  the v12 logistic model as coverage.
+- Motivation: earlier v16 pairwise value training only saw partial current-run
+  events. The post-v12 refresh lets the scout absorb the completed v12 hard
+  negatives, positives, and solved rows before reranking remaining unsolved
+  problems.
+
+### `postv12_solvedonly_value_strict_stage4_v1`
+
+- Commit: `e2fc5ed`.
+- Changes the refreshed value model default to
+  `v18_pairwise_postv12_solvedonly_timeoutfb4_v1`, with progress positives
+  disabled during the value-data append.
+- Tightens stage4 candidate-signal SFT defaults:
+  `SIGNAL_MIN_PROGRESS_DELTA=80`, `SIGNAL_MAX_ELAPSED_SEC=90`,
+  `SIGNAL_MIN_PROGRESS_EFFICIENCY=1.0`,
+  `SIGNAL_MAX_PROGRESS_ROWS_PER_PROBLEM=8`,
+  `SIGNAL_MAX_PROGRESS_ROWS_PER_TYPE=16`, and
+  `SIGNAL_SOLVED_REPEAT=32`.
+- Motivation: completed failures such as `translated_imo_2008_p1a` and
+  `translated_imo_2008_p1b` produced many DDAR-progress positives but no
+  solve, suggesting that "more derived facts" is a noisy proxy for correct
+  direction.
+
+### `postv12_rerank_beam_score_v1`
+
+- Commit: `f25fccf`.
+- Adds `--candidate_beam_score` with choices `lm_score`, `rerank_score`, and
+  `lm_plus_rerank`; default remains `lm_score`.
+- Post-v12 scout/stage4 use `candidate_beam_score=rerank_score`.
+- Motivation: current event traces show LM scores are often effectively 0.0,
+  so the value model was ordering candidate DDAR evaluation but not really
+  deciding which states persisted into later search depths.
+
+### `postv12_decode_beam_limit_v1`
+
+- Commit: `a1697a3`.
+- Adds `--candidate_decode_beam_limit`, defaulting to 0 for compatibility.
+- Post-v12 scout/stage4 use `candidate_decode_beam_limit=16`, with
+  `beam_decode_pruned` events logging skipped beam states.
+- Motivation: `translated_imo_2009_p2` generated thousands of depth-1/depth-2
+  candidates while only a small depth-eval window was DDAR-checked. Once beam
+  scores are value-rerank driven, decoding only the top beam states should
+  reduce wasted generation and keep later-depth search focused.
 
 ## Versioning Rule
 

@@ -21,7 +21,7 @@ echo "[ag1-full] waiting for GPU free: min_free=${MIN_FREE_MEM_MB}MB stable_poll
 stable=0
 while true; do
   free_mem=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | head -1 | tr -d ' ')
-  qwen_pids=$(pgrep -f 'run_qwen_ag_benchmark.py' || true)
+  qwen_pids=$(pgrep -f 'run_qwen_ag_benchmark.py' | paste -sd, - || true)
   now=$(date -Is)
   echo "[ag1-full] $now free_mem_mb=${free_mem:-unknown} qwen_pids=${qwen_pids:-none} stable=$stable" | tee -a "$LOG"
 

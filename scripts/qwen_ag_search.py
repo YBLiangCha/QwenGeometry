@@ -1011,6 +1011,58 @@ def candidate_generation_dedup_key(text: str) -> str:
     return text
 
 
+def raw_candidate_construction_type_hint(text: str) -> str:
+  """Best-effort construction-type key for invalid raw DSL candidates."""
+  text = normalize_generated_candidate(text)
+  if ' = ' in text:
+    return construction_type_key(text)
+  if ' : ' not in text:
+    return 'unknown'
+  point, prem_str = text.split(' : ', 1)
+  point = point.strip()
+  if not _POINT_RE.match(point):
+    return 'unknown'
+  prem_toks = prem_str.rstrip(';').split()
+  prems: list[list[str]] = [[]]
+  for i, tok in enumerate(prem_toks):
+    if tok.isdigit():
+      if i < len(prem_toks) - 1:
+        prems.append([])
+    else:
+      prems[-1].append(tok)
+
+  names = []
+  fallback = {
+      'C': 'on_line',
+      'coll': 'on_line',
+      'O': 'on_circum',
+      'cyclic': 'on_circum',
+      'P': 'on_pline',
+      'para': 'on_pline',
+      'T': 'on_tline',
+      'perp': 'on_tline',
+      'D': 'eqdistance',
+      'cong': 'eqdistance',
+      '^': 'eqangle3',
+      'eqangle': 'eqangle3',
+  }
+  for prem in prems:
+    if not prem:
+      continue
+    name, args = prem[0], prem[1:]
+    try:
+      construction_name, _ = translate_constrained_to_constructive(
+          point, name, args
+      )
+    except Exception:  # pylint: disable=broad-except
+      construction_name = fallback.get(name)
+    if construction_name:
+      names.append(construction_name)
+  if not names:
+    return 'unknown'
+  return '+'.join(sorted(names))
+
+
 def template_backfill_candidates(
     point_names: set[str] | None,
     max_candidates: int,

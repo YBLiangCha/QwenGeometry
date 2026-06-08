@@ -454,7 +454,10 @@ def candidate_construction_type_for_event(qs: Any, raw: str, translation: str) -
   try:
     return qs.construction_type_key(qs.dsl_to_constructive_candidate(raw))
   except Exception:  # pylint: disable=broad-except
-    return 'error'
+    try:
+      return qs.raw_candidate_construction_type_hint(raw)
+    except Exception:  # pylint: disable=broad-except
+      return 'error'
 
 
 def csv_arg_set(value: str | None) -> set[str]:
@@ -2949,7 +2952,8 @@ def parse_args() -> argparse.Namespace:
       '--candidate_adaptive_type_penalty_reasons',
       default=(
           'point_too_close,point_too_far,point_already_exists,unknown_point,'
-          'invalid_quad_solve,dep_check_fail,invalid_line_intersect,value_error'
+          'invalid_quad_solve,dep_check_fail,invalid_line_intersect,value_error,'
+          'invalid_predicate'
       ),
       help='comma-separated invalid-construction reasons that feed adaptive type penalty',
   )
@@ -3216,7 +3220,8 @@ def parse_args() -> argparse.Namespace:
       '--candidate_hard_negative_signal_reasons',
       default=(
           'point_too_close,point_too_far,point_already_exists,unknown_point,'
-          'invalid_quad_solve,dep_check_fail,invalid_line_intersect,value_error'
+          'invalid_quad_solve,dep_check_fail,invalid_line_intersect,value_error,'
+          'invalid_predicate'
       ),
       help='comma-separated invalid-construction reasons to log as hard-negative signals',
   )

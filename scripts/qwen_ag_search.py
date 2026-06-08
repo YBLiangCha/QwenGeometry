@@ -104,11 +104,21 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     'eqdistance+on_circle': 2.5,
     'on_bline+on_circum': 2.5,
     'on_bline+on_circle': 2.3,
+    'on_circle+on_line': 2.3,
     'on_circle+on_dia': 2.2,
+    'on_circle+on_circum': 2.1,
     'on_circle+on_pline': 2.0,
     'on_circum+on_tline': 2.0,
+    'on_bline+on_pline': 1.9,
     'on_circum+on_dia': 1.8,
+    'eqdistance+on_line': 1.8,
     'on_dia': 1.8,
+    'on_dia+on_tline': 1.7,
+    'on_dia+on_line': 1.7,
+    'on_circum+on_line': 1.6,
+    'on_circum+on_circum': 1.5,
+    'on_aline+on_circle': 1.5,
+    'angle_bisector': 1.4,
 }
 _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG = (
     set(_CONSTRUCTIVE_ARG_ARITY) - {'eqangle3'}

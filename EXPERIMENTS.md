@@ -6,18 +6,18 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `postv12_fact_context_top12_v1`.
+- Current GitHub source head: `postv12_progress_type_bonus_v2`.
 - Current running v12 clean bench tag:
   `unsolved_factctx_promptaug_top8_candidate_signal_postrun_value_v12_default_v1_depth48_t240_w150_nrs48_qm3_sigrep4_blinedia_statededup_nodediv_dsltpl_combotpl_rarecombo_vprior_v1`.
 - Current v12 clean source snapshot:
   `/tmp/qwen_ag_scripts_c541dd4` (`value_v12_default_queue_v1`). This active
   process is intentionally not overwritten.
 - Current waiting scout queue source:
-  `/tmp/qwen_ag_scripts_postv12_fact_context_top12_v1`, tag
-  `unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v18coverage_after_v12_depth16_typecap4_fact12_decbeam16_t160_w100_nrs48_qm3_timeoutfb4append_progbeam_progprefix_factmem_binddedup_salvage_v1`.
+  `/tmp/qwen_ag_scripts_postv12_progress_type_bonus_v2`, tag
+  `unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v18coverage_ptype2_after_v12_depth16_typecap4_fact12_decbeam16_t160_w100_nrs48_qm3_timeoutfb4append_progbeam_progprefix_factmem_binddedup_salvage_v1`.
 - Current waiting post-v12 stage4 queue source:
-  `/tmp/qwen_ag_scripts_postv12_fact_context_top12_v1`, tag
-  `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front8_progress_v18coverage_progbeam_decbeam16_depth24_typecap6_fact12_t200_w120_nrs48_qm3_timeoutfb4append_progprefix_factmem_binddedup_salvage_v1`.
+  `/tmp/qwen_ag_scripts_postv12_progress_type_bonus_v2`, tag
+  `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front8_progress_v18coverage_ptype2_progbeam_decbeam16_depth24_typecap6_fact12_t200_w120_nrs48_qm3_timeoutfb4append_progprefix_factmem_binddedup_salvage_v1`.
 - Running-workspace scripts are intentionally versioned in `/tmp` snapshots
   rather than overwritten in-place. The benchmark uses spawn-based candidate
   workers, so mixing source versions inside a long process can corrupt
@@ -922,6 +922,22 @@ changes. Tags are the practical version identifiers for this workspace.
   DDAR-progress positives, so keeping more parent/child DDAR facts in the next
   prompt may help the LM turn symbolic progress into the next useful auxiliary
   point.
+
+### `postv12_progress_type_bonus_v2`
+
+- Git tag: `postv12_progress_type_bonus_v2`.
+- Expands `_PROGRESS_SIGNAL_TYPE_BONUS` used by
+  `value_model_frontfill_progress_diverse`.
+- Added coverage for mined high-progress families from completed
+  `translated_imo_2008_p1a`, `translated_imo_2008_p1b`,
+  `translated_imo_2009_p2`, and partial `translated_imo_2010_p2` traces:
+  `on_circle+on_line`, `on_circle+on_circum`, `on_bline+on_pline`,
+  `eqdistance+on_line`, `on_dia+on_tline`, `on_dia+on_line`,
+  `on_circum+on_line`, `on_circum+on_circum`, `on_aline+on_circle`, and
+  `angle_bisector`.
+- Motivation: the online value model often scores these progress-bearing
+  families inconsistently. Reserving coverage slots lets DDAR observe their
+  effect before depth-level pruning removes them.
 
 ## Versioning Rule
 

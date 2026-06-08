@@ -150,6 +150,7 @@ def make_candidate_task(
     candidate_rerank_score: float | None = None,
     candidate_source: str | None = None,
     candidate_construction_type: str | None = None,
+    parent_fact_context: list[str] | None = None,
 ) -> dict[str, Any]:
   raw_text = raw.strip()
   new_point = None
@@ -174,8 +175,84 @@ def make_candidate_task(
       'candidate_rerank_score': candidate_rerank_score,
       'candidate_source': candidate_source,
       'candidate_construction_type': candidate_construction_type,
+      'parent_fact_context': list(parent_fact_context or []),
       'tag': f'depth{depth}:{raw}',
   }
+
+
+def make_beam_state(
+    g: Any,
+    prompt: str,
+    pstring: str,
+    fact_context: list[str] | None = None,
+) -> tuple[Any, str, str, list[str]]:
+  return (g, prompt, pstring, list(fact_context or []))
+
+
+def unpack_beam_state(state: Any) -> tuple[Any, str, str, list[str]]:
+  """Return a normalized beam state while accepting older 3-tuples."""
+  if isinstance(state, tuple) and len(state) == 4:
+    g, prompt, pstring, fact_context = state
+    return g, prompt, pstring, list(fact_context or [])
+  if isinstance(state, tuple) and len(state) == 3:
+    g, prompt, pstring = state
+    return g, prompt, pstring, []
+  raise ValueError(f'unexpected beam state shape: {state!r}')
+
+
+def merge_fact_context(
+    parent_facts: list[str] | None,
+    child_facts: list[str] | None,
+    max_facts: int,
+) -> list[str]:
+  """Keep current DDAR facts while preserving a little parent context."""
+  if max_facts <= 0:
+    return []
+  parent = [fact for fact in parent_facts or [] if fact]
+  child = [fact for fact in child_facts or [] if fact]
+  if not parent:
+    return child[:max_facts]
+  if not child:
+    return parent[:max_facts]
+  parent_keep = max(1, min(len(parent), max_facts // 3))
+  child_keep = max(1, max_facts - parent_keep)
+  merged: list[str] = []
+  seen: set[str] = set()
+
+  def add_many(facts: list[str], limit: int | None = None) -> None:
+    added = 0
+    for fact in facts:
+      if fact in seen:
+        continue
+      merged.append(fact)
+      seen.add(fact)
+      added += 1
+      if len(merged) >= max_facts or (limit is not None and added >= limit):
+        break
+
+  add_many(child, child_keep)
+  add_many(parent, parent_keep)
+  add_many(child)
+  add_many(parent)
+  return merged[:max_facts]
+
+
+def build_next_prompt(
+    qs: Any,
+    pr: Any,
+    p_new: Any | None,
+    p_new_txt: str,
+    prompt_next: str,
+    fact_context: list[str],
+    args: argparse.Namespace,
+) -> str:
+  if not args.lm_fact_context_top_k:
+    return prompt_next
+  if p_new is not None:
+    return qs.build_lm_prompt(p_new, qs.DEFINITIONS, fact_context)
+  return qs.build_lm_prompt_from_problem_text(
+      p_new_txt, pr, qs.DEFINITIONS, fact_context
+  )
 
 
 def maybe_log_candidate_sft_signal(
@@ -527,21 +604,27 @@ def maybe_add_timeout_beam_fallback(
       reverse=True,
   )
   for fallback_rank, item in enumerate(ranked[:limit], start=1):
+    fallback_fact_context = (
+        list(item.get('parent_fact_context') or [])
+        if args.lm_fact_context_top_k
+        else []
+    )
     prompt = (
         qs.build_lm_prompt_from_problem_text(
             item['p_new_txt'],
             pr,
             qs.DEFINITIONS,
-            None,
+            fallback_fact_context,
         )
         if args.lm_fact_context_top_k
         else item['prompt_next']
     )
     next_beam.add(
-        (
+        make_beam_state(
             None,
             prompt,
             item['p_new_txt'],
+            fallback_fact_context,
         ),
         candidate_beam_score(
             item.get('prev_score', 0.0),
@@ -563,6 +646,7 @@ def maybe_add_timeout_beam_fallback(
         fallback_rank=fallback_rank,
         fallback_limit=limit,
         elapsed_sec=item.get('elapsed_sec'),
+        parent_fact_context_count=len(fallback_fact_context),
     )
 
 
@@ -652,8 +736,11 @@ def solve_one(
       qs.DEFINITIONS,
       root.get('fact_context') if args.lm_fact_context_top_k else None,
   )
+  root_fact_context = (
+      list(root.get('fact_context') or []) if args.lm_fact_context_top_k else []
+  )
   beam = qs.BeamQueue(args.beam_size)
-  beam.add((g, prompt0, p.txt()), 0.0)
+  beam.add(make_beam_state(g, prompt0, p.txt(), root_fact_context), 0.0)
   candidate_max_level = args.candidate_max_level or args.max_level
   candidate_timeout = args.candidate_ddar_timeout or args.ddar_timeout
   candidate_wall_timeout = args.candidate_wall_timeout or candidate_timeout
@@ -665,9 +752,10 @@ def solve_one(
     next_beam = qs.BeamQueue(args.beam_size)
     if args.candidate_depth_eval_limit and args.candidate_depth_eval_limit > 0:
       depth_candidates = []
-      for node_index, (prev_score, (g_cur, prompt, pstring)) in enumerate(
+      for node_index, (prev_score, beam_state) in enumerate(
           limited_beam_nodes(qs, events_file, beam, args, depth)
       ):
+        g_cur, prompt, pstring, parent_fact_context = unpack_beam_state(beam_state)
         p_cur = pr.Problem.from_txt(pstring, translate=False)
         if g_cur is None:
           g_cur, _ = build_graph_for_symbolic_search(gh, p_cur, qs.DEFINITIONS)
@@ -818,6 +906,7 @@ def solve_one(
               'prev_score': prev_score,
               'prompt': prompt,
               'pstring': pstring,
+              'parent_fact_context': parent_fact_context,
           })
           depth_candidates.append(record)
       ranked_depth_candidates = qs.rerank_candidate_records(
@@ -867,6 +956,7 @@ def solve_one(
               candidate_rerank_score=record.get('_candidate_rerank_score'),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
+              parent_fact_context=record.get('parent_fact_context'),
           ))
           parallel_tasks[-1]['prev_score'] = record['prev_score']
           continue
@@ -908,19 +998,25 @@ def solve_one(
               'aux': translation,
           })
           return row
+        next_fact_context = merge_fact_context(
+            record.get('parent_fact_context'),
+            result.get('fact_context'),
+            args.lm_fact_context_top_k,
+        )
         next_beam.add(
-            (
+            make_beam_state(
                 g_new,
-                qs.build_lm_prompt(
+                build_next_prompt(
+                    qs,
+                    pr,
                     p_new,
-                    qs.DEFINITIONS,
-                    result.get('fact_context')
-                    if args.lm_fact_context_top_k
-                    else None,
-                )
-                if args.lm_fact_context_top_k
-                else prompt_next,
+                    p_new_txt,
+                    prompt_next,
+                    next_fact_context,
+                    args,
+                ),
                 p_new_txt,
+                next_fact_context,
             ),
             candidate_beam_score(
                 record['prev_score'],
@@ -979,20 +1075,25 @@ def solve_one(
               'aux': item['translation'],
           })
           return row
+        next_fact_context = merge_fact_context(
+            item.get('parent_fact_context'),
+            result.get('fact_context'),
+            args.lm_fact_context_top_k,
+        )
         next_beam.add(
-            (
+            make_beam_state(
                 None,
-                qs.build_lm_prompt_from_problem_text(
-                    item['p_new_txt'],
+                build_next_prompt(
+                    qs,
                     pr,
-                    qs.DEFINITIONS,
-                    result.get('fact_context')
-                    if args.lm_fact_context_top_k
-                    else None,
-                )
-                if args.lm_fact_context_top_k
-                else item['prompt_next'],
+                    None,
+                    item['p_new_txt'],
+                    item['prompt_next'],
+                    next_fact_context,
+                    args,
+                ),
                 item['p_new_txt'],
+                next_fact_context,
             ),
             candidate_beam_score(
                 item['prev_score'],
@@ -1014,13 +1115,14 @@ def solve_one(
         qs.event(events_file, kind='beam_empty', depth=depth)
         break
       continue
-    for prev_score, (g_cur, prompt, pstring) in limited_beam_nodes(
+    for prev_score, beam_state in limited_beam_nodes(
         qs,
         events_file,
         beam,
         args,
         depth,
     ):
+      g_cur, prompt, pstring, parent_fact_context = unpack_beam_state(beam_state)
       p_cur = pr.Problem.from_txt(pstring, translate=False)
       if g_cur is None:
         g_cur, _ = build_graph_for_symbolic_search(gh, p_cur, qs.DEFINITIONS)
@@ -1189,6 +1291,7 @@ def solve_one(
               candidate_rerank_score=record.get('_candidate_rerank_score'),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
+              parent_fact_context=parent_fact_context,
           ))
           parallel_tasks[-1]['prev_score'] = prev_score
           continue
@@ -1230,19 +1333,25 @@ def solve_one(
               'aux': translation,
           })
           return row
+        next_fact_context = merge_fact_context(
+            parent_fact_context,
+            result.get('fact_context'),
+            args.lm_fact_context_top_k,
+        )
         next_beam.add(
-            (
+            make_beam_state(
                 g_new,
-                qs.build_lm_prompt(
+                build_next_prompt(
+                    qs,
+                    pr,
                     p_new,
-                    qs.DEFINITIONS,
-                    result.get('fact_context')
-                    if args.lm_fact_context_top_k
-                    else None,
-                )
-                if args.lm_fact_context_top_k
-                else prompt_next,
+                    p_new_txt,
+                    prompt_next,
+                    next_fact_context,
+                    args,
+                ),
                 p_new_txt,
+                next_fact_context,
             ),
             candidate_beam_score(
                 prev_score,
@@ -1301,20 +1410,25 @@ def solve_one(
               'aux': item['translation'],
           })
           return row
+        next_fact_context = merge_fact_context(
+            item.get('parent_fact_context'),
+            result.get('fact_context'),
+            args.lm_fact_context_top_k,
+        )
         next_beam.add(
-            (
+            make_beam_state(
                 None,
-                qs.build_lm_prompt_from_problem_text(
-                    item['p_new_txt'],
+                build_next_prompt(
+                    qs,
                     pr,
-                    qs.DEFINITIONS,
-                    result.get('fact_context')
-                    if args.lm_fact_context_top_k
-                    else None,
-                )
-                if args.lm_fact_context_top_k
-                else item['prompt_next'],
+                    None,
+                    item['p_new_txt'],
+                    item['prompt_next'],
+                    next_fact_context,
+                    args,
+                ),
                 item['p_new_txt'],
+                next_fact_context,
             ),
             candidate_beam_score(
                 item['prev_score'],

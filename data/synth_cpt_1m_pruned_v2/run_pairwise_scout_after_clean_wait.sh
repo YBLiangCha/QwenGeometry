@@ -16,7 +16,7 @@ WAIT_INTERVAL=${WAIT_INTERVAL:-300}
 WAIT_ALLOW_INCOMPLETE=${WAIT_ALLOW_INCOMPLETE:-0}
 
 SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT:-4}
-SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v12_front12_v16_scout_depth16_t160_w100_nrs48_qm3_timeoutfb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}_v1}
+SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v12_front12_v16_scout_depth16_t160_w100_nrs48_qm3_timeoutfb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}_factmem_v1}
 SCOUT_OUT_DIR=${SCOUT_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${SCOUT_TAG}}
 SCOUT_LOG=${SCOUT_LOG:-outputs/${SCOUT_TAG}.log}
 SCOUT_QUEUE_LOG=${SCOUT_QUEUE_LOG:-outputs/${SCOUT_TAG}.queue.log}

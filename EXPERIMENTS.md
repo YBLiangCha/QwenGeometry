@@ -6,18 +6,18 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `postv12_v12_primary_v18_coverage_v1`.
+- Current GitHub source head: `postv12_dynamic_fact_memory_v1`.
 - Current running v12 clean bench tag:
   `unsolved_factctx_promptaug_top8_candidate_signal_postrun_value_v12_default_v1_depth48_t240_w150_nrs48_qm3_sigrep4_blinedia_statededup_nodediv_dsltpl_combotpl_rarecombo_vprior_v1`.
 - Current v12 clean source snapshot:
   `/tmp/qwen_ag_scripts_c541dd4` (`value_v12_default_queue_v1`). This active
   process is intentionally not overwritten.
 - Current waiting scout queue source:
-  `/tmp/qwen_ag_scripts_postv12_v12_primary_v18_coverage_v1`, tag
-  `unsolved_factctx_promptaug_top8_hybrid_v12_front12_v18coverage_after_v12_depth16_decbeam16_t160_w100_nrs48_qm3_timeoutfb4_beamscore_rerank_salvage_v1`.
+  `/tmp/qwen_ag_scripts_postv12_dynamic_fact_memory_v1`, tag
+  `unsolved_factctx_promptaug_top8_hybrid_v12_front12_v18coverage_after_v12_depth16_decbeam16_t160_w100_nrs48_qm3_timeoutfb4_beamscore_rerank_factmem_salvage_v1`.
 - Current waiting post-v12 stage4 queue source:
-  `/tmp/qwen_ag_scripts_postv12_v12_primary_v18_coverage_v1`, tag
-  `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front12_v18coverage_beamscore_rerank_decbeam16_depth24_t200_w120_nrs48_qm3_timeoutfb4_salvage_v1`.
+  `/tmp/qwen_ag_scripts_postv12_dynamic_fact_memory_v1`, tag
+  `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front12_v18coverage_beamscore_rerank_decbeam16_depth24_t200_w120_nrs48_qm3_timeoutfb4_factmem_salvage_v1`.
 - Running-workspace scripts are intentionally versioned in `/tmp` snapshots
   rather than overwritten in-place. The benchmark uses spawn-based candidate
   workers, so mixing source versions inside a long process can corrupt
@@ -778,6 +778,19 @@ changes. Tags are the practical version identifiers for this workspace.
   clean run improved over v16 but still underperformed the v12 logistic model
   on partial-data AUC/top-k recall. Keeping v12 as the primary frontfill
   scorer is therefore safer, while v18 still contributes solved-only coverage.
+
+### `postv12_dynamic_fact_memory_v1`
+
+- Git tag: `postv12_dynamic_fact_memory_v1`.
+- The benchmark driver now stores fact context in each beam state and merges a
+  small amount of parent DDAR fact context with the newly selected child DDAR
+  facts before building the next LM prompt.
+- Timeout beam fallback also carries the parent fact context instead of
+  rebuilding the prompt with an empty `{D}` fact block.
+- Motivation: dynamic DDAR facts were already reinserted into prompts, but each
+  depth kept only the current node's top facts. This could discard root or
+  parent facts that shaped a promising branch. The fact-memory merge preserves
+  continuity while still giving most of the top-k slots to fresh child facts.
 
 ## Versioning Rule
 

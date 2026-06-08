@@ -74,6 +74,7 @@ def problem_line(problem: dict[str, Any]) -> str:
       f"| {problem.get('valid_candidates', 0)} "
       f"| {problem.get('depth_eval_selected', 0)} "
       f"| {phase_count(problem, 'tail_rank_coverage')} "
+      f"| {problem.get('adaptive_penalized_records', 0)} "
       f"| {filtered.get('depth_rank_pruned', 0)} "
       f"| {problem.get('candidate_ddar_done', 0)} "
       f"| {timeout_errors} "
@@ -90,6 +91,8 @@ def solved_detail(problem: dict[str, Any]) -> str:
   rerank_phase = event.get('candidate_rerank_phase') or '-'
   rank = event.get('candidate_depth_rank')
   rank_text = '-' if rank is None else str(rank)
+  penalty = event.get('candidate_adaptive_type_penalty')
+  penalty_text = '-' if penalty in (None, 0) else str(penalty)
   aux_type = (
       event.get('candidate_construction_type')
       or problem.get('solved_aux_construction_type')
@@ -97,7 +100,8 @@ def solved_detail(problem: dict[str, Any]) -> str:
   )
   return (
       f"depth={problem.get('solved_depth')} rank={rank_text} "
-      f"phase={phase} rerank={rerank_phase} type={aux_type} "
+      f"phase={phase} rerank={rerank_phase} adapt_penalty={penalty_text} "
+      f"type={aux_type} "
       f"aux=`{problem.get('aux')}`"
   )
 
@@ -159,6 +163,11 @@ def render_report(payload: dict[str, Any]) -> str:
       f"- Candidate hard-negative signals: "
       f"{aggregate.get('candidate_hard_negative_signals', 0)} "
       f"({fmt_count_map(aggregate.get('candidate_hard_negative_signal_reasons'))})",
+      f"- Adaptive type failures: {aggregate.get('adaptive_type_failures', 0)} "
+      f"({fmt_count_map(aggregate.get('adaptive_type_failure_reasons'))})",
+      f"- Adaptive penalty applied / records: "
+      f"{aggregate.get('adaptive_penalty_applied_events', 0)} / "
+      f"{aggregate.get('adaptive_penalized_records', 0)}",
       '',
       '## Evaluation Coverage',
       '',
@@ -216,6 +225,18 @@ def render_report(payload: dict[str, Any]) -> str:
       f"- Timeout top: {fmt_count_map(aggregate.get('timeout_construction_types_top'))}",
       f"- Hard-negative top: "
       f"{fmt_count_map(aggregate.get('candidate_hard_negative_signal_types_top'))}",
+      f"- Adaptive failure top: "
+      f"{fmt_count_map(aggregate.get('adaptive_type_failure_types_top'))}",
+      f"- Adaptive penalty top: "
+      f"{fmt_count_map(aggregate.get('adaptive_penalty_top_types_top'))}",
+      f"- Adaptive penalty stages: "
+      f"{fmt_count_map(aggregate.get('adaptive_penalty_stages'))}",
+      f"- Adaptive penalized selected top: "
+      f"{fmt_count_map(aggregate.get('adaptive_penalized_selected_types_top'))}",
+      f"- Adaptive penalized beam-add top: "
+      f"{fmt_count_map(aggregate.get('adaptive_penalized_beam_add_types_top'))}",
+      f"- Adaptive penalized SFT top: "
+      f"{fmt_count_map(aggregate.get('adaptive_penalized_sft_signal_types_top'))}",
       f"- SFT signal rerank phases: "
       f"{fmt_count_map(aggregate.get('candidate_sft_signal_rerank_phases'))}",
       f"- DDAR error rerank phases: "
@@ -251,6 +272,12 @@ def render_report(payload: dict[str, Any]) -> str:
           'without drowning out generic progress_type_coverage.'
       ),
       (
+          '- adaptive type penalty should reduce repeated invalid families while '
+          'still allowing penalized types to appear in beam-add/SFT if DDAR gives '
+          'real progress; a zero SFT/beam-add count for heavily penalized types '
+          'means the penalty may be too aggressive.'
+      ),
+      (
           '- Candidate SFT data should continue to emphasize solved candidates '
           'and fast DDAR-progress positives; slow timeout branches should remain '
           'hard negatives unless fallback later solves a problem.'
@@ -258,8 +285,8 @@ def render_report(payload: dict[str, Any]) -> str:
       '',
       '## Per-Problem Table',
       '',
-      '| Problem | Solved | Cand | Valid | Selected | TailSel | RankPruned | DDAR | Timeout | Fallback | Max Added/Type | Diagnosis |',
-      '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
+      '| Problem | Solved | Cand | Valid | Selected | TailSel | AdaptPen | RankPruned | DDAR | Timeout | Fallback | Max Added/Type | Diagnosis |',
+      '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
   ])
   lines.extend(problem_line(problem) for problem in problems)
   lines.extend([
@@ -275,6 +302,8 @@ def render_report(payload: dict[str, Any]) -> str:
           f"selected={fmt_count_map(problem.get('depth_eval_selected_phases'), 5)}; "
           f"selected_ranks={fmt_count_map(problem.get('depth_eval_selected_rank_bins'), 5)}; "
           f"filtered_ranks={fmt_count_map(problem.get('filtered_rank_bins'), 5)}; "
+          f"adapt_penalty={problem.get('adaptive_penalized_records', 0)} "
+          f"{fmt_count_map(problem.get('adaptive_penalty_top_types_top'), 3)}; "
           f"timeout={fmt_count_map(problem.get('timeout_construction_types_top'), 5)}; "
           f"fallback={problem.get('candidate_timeout_beam_fallbacks', 0)}"
       )

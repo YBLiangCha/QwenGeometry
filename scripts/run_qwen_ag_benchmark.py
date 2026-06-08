@@ -325,6 +325,10 @@ def maybe_log_candidate_sft_signal(
     candidate_construction_type: str | None = None,
     candidate_rerank_score: float | None = None,
     candidate_rerank_phase: str | None = None,
+    candidate_base_rerank_score: float | None = None,
+    candidate_adaptive_type_failures: int | None = None,
+    candidate_adaptive_type_penalty: float | None = None,
+    candidate_adaptive_penalty_stage: str | None = None,
 ) -> None:
   if not args.log_candidate_sft_signals or not prompt:
     return
@@ -373,6 +377,10 @@ def maybe_log_candidate_sft_signal(
       ),
       candidate_rerank_score=candidate_rerank_score,
       candidate_rerank_phase=candidate_rerank_phase,
+      candidate_base_rerank_score=candidate_base_rerank_score,
+      candidate_adaptive_type_failures=candidate_adaptive_type_failures,
+      candidate_adaptive_type_penalty=candidate_adaptive_type_penalty,
+      candidate_adaptive_penalty_stage=candidate_adaptive_penalty_stage,
   )
 
 
@@ -1467,6 +1475,16 @@ def solve_one(
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_rerank_score=record.get('_candidate_rerank_score'),
             candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+            candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
+            candidate_adaptive_type_failures=record.get(
+                '_candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=record.get(
+                '_candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=record.get(
+                '_candidate_adaptive_penalty_stage'
+            ),
         )
         if result['solved']:
           qs.event(
@@ -1609,6 +1627,16 @@ def solve_one(
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_rerank_score=item.get('candidate_rerank_score'),
             candidate_rerank_phase=item.get('candidate_rerank_phase'),
+            candidate_base_rerank_score=item.get('candidate_base_rerank_score'),
+            candidate_adaptive_type_failures=item.get(
+                'candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=item.get(
+                'candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=item.get(
+                'candidate_adaptive_penalty_stage'
+            ),
         )
         if result['solved']:
           qs.event(
@@ -1972,6 +2000,16 @@ def solve_one(
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_rerank_score=record.get('_candidate_rerank_score'),
             candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+            candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
+            candidate_adaptive_type_failures=record.get(
+                '_candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=record.get(
+                '_candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=record.get(
+                '_candidate_adaptive_penalty_stage'
+            ),
         )
         if result['solved']:
           qs.event(
@@ -2114,6 +2152,16 @@ def solve_one(
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_rerank_score=item.get('candidate_rerank_score'),
             candidate_rerank_phase=item.get('candidate_rerank_phase'),
+            candidate_base_rerank_score=item.get('candidate_base_rerank_score'),
+            candidate_adaptive_type_failures=item.get(
+                'candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=item.get(
+                'candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=item.get(
+                'candidate_adaptive_penalty_stage'
+            ),
         )
         if result['solved']:
           qs.event(

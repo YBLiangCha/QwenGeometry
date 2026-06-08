@@ -306,9 +306,26 @@ def analyze_problem(
   candidate_beam_add_rerank_phases = Counter()
   candidate_beam_add_rank_bins = Counter()
   candidate_sft_signal_rerank_phases = Counter()
+  adaptive_type_failure_reasons = Counter()
+  adaptive_type_failure_types = Counter()
+  adaptive_type_failure_sources = Counter()
+  adaptive_penalty_applied_events = 0
+  adaptive_penalized_records = 0
+  adaptive_penalty_stages = Counter()
+  adaptive_penalty_top_types = Counter()
+  adaptive_penalty_max_by_type: dict[str, float] = {}
+  adaptive_penalized_selected_types = Counter()
+  adaptive_penalized_filtered_types = Counter()
+  adaptive_penalized_error_types = Counter()
+  adaptive_penalized_beam_add_types = Counter()
+  adaptive_penalized_sft_signal_types = Counter()
   solved_event: dict[str, Any] = {}
   root_ddar: dict[str, Any] = {}
   lookup: dict[tuple[int, str], dict[str, str]] = {}
+
+  def has_adaptive_penalty(event: dict[str, Any]) -> bool:
+    value = event.get('candidate_adaptive_type_penalty')
+    return isinstance(value, (int, float)) and value > 0
 
   for event in read_jsonl(path):
     kind = event.get('kind') or 'unknown'
@@ -341,6 +358,8 @@ def analyze_problem(
       filtered_construction_types[ctype] += 1
       filtered_sources[record['source']] += 1
       filtered_types_by_reason.setdefault(reason, Counter())[ctype] += 1
+      if has_adaptive_penalty(event):
+        adaptive_penalized_filtered_types[ctype] += 1
       filtered_eval_phases[event.get('candidate_depth_eval_phase') or 'pruned'] += 1
       filtered_rerank_phases[event.get('candidate_rerank_phase') or 'unknown'] += 1
       filtered_rank_bins[rank_bin(event.get('candidate_depth_rank'))] += 1
@@ -363,11 +382,15 @@ def analyze_problem(
         depth_eval_selected_ranks.append(float(rank))
       depth_eval_selected_types[record['construction_type']] += 1
       depth_eval_selected_sources[record['source']] += 1
+      if has_adaptive_penalty(event):
+        adaptive_penalized_selected_types[record['construction_type']] += 1
     elif kind == 'candidate_ddar_error':
       candidate_ddar_errors[event.get('error') or 'unknown'] += 1
       record = candidate_record(event, lookup)
       ctype = record['construction_type']
       candidate_error_construction_types[ctype] += 1
+      if has_adaptive_penalty(event):
+        adaptive_penalized_error_types[ctype] += 1
       phase = event.get('candidate_depth_eval_phase') or 'unknown'
       candidate_error_eval_phases[phase] += 1
       candidate_error_rerank_phases[
@@ -434,6 +457,8 @@ def analyze_problem(
       candidate_sft_signals[event.get('reason') or 'unknown'] += 1
       record = candidate_record(event, lookup)
       candidate_sft_signal_types[record['construction_type']] += 1
+      if has_adaptive_penalty(event):
+        adaptive_penalized_sft_signal_types[record['construction_type']] += 1
       candidate_sft_signal_rerank_phases[
           event.get('candidate_rerank_phase') or 'unknown'
       ] += 1
@@ -442,6 +467,30 @@ def analyze_problem(
       record = candidate_record(event, lookup)
       candidate_hard_negative_signal_types[record['construction_type']] += 1
       candidate_hard_negative_signal_sources[record['source']] += 1
+    elif kind == 'candidate_adaptive_type_failure':
+      adaptive_type_failure_reasons[event.get('reason') or 'unknown'] += 1
+      record = candidate_record(event, lookup)
+      adaptive_type_failure_types[record['construction_type']] += 1
+      adaptive_type_failure_sources[record['source']] += 1
+    elif kind == 'candidate_adaptive_type_penalty_applied':
+      adaptive_penalty_applied_events += 1
+      adaptive_penalty_stages[event.get('stage') or 'unknown'] += 1
+      try:
+        adaptive_penalized_records += int(event.get('penalized_records') or 0)
+      except (TypeError, ValueError):
+        pass
+      for item in event.get('top_penalized') or []:
+        if not isinstance(item, dict):
+          continue
+        ctype = str(item.get('construction_type') or 'unknown')
+        adaptive_penalty_top_types[ctype] += 1
+        try:
+          penalty = float(item.get('penalty') or 0.0)
+        except (TypeError, ValueError):
+          penalty = 0.0
+        adaptive_penalty_max_by_type[ctype] = max(
+            adaptive_penalty_max_by_type.get(ctype, 0.0), penalty
+        )
     elif kind == 'candidate_timeout_config':
       candidate_timeout_config = {
           key: event.get(key)
@@ -476,6 +525,9 @@ def analyze_problem(
       candidate_beam_add_rank_bins[
           rank_bin(event.get('candidate_depth_rank'))
       ] += 1
+      if has_adaptive_penalty(event):
+        record = candidate_record(event, lookup)
+        adaptive_penalized_beam_add_types[record['construction_type']] += 1
     elif kind == 'solved':
       solved_event = {
           key: event.get(key)
@@ -486,6 +538,10 @@ def analyze_problem(
               'candidate_depth_eval_phase',
               'candidate_rerank_phase',
               'candidate_rerank_score',
+              'candidate_base_rerank_score',
+              'candidate_adaptive_type_failures',
+              'candidate_adaptive_type_penalty',
+              'candidate_adaptive_penalty_stage',
               'candidate_source',
               'candidate_construction_type',
           )
@@ -560,6 +616,41 @@ def analyze_problem(
       'candidate_sft_signal_types_top': top_counts(candidate_sft_signal_types),
       'candidate_sft_signal_rerank_phases': dict(
           candidate_sft_signal_rerank_phases
+      ),
+      'adaptive_type_failure_reasons': dict(adaptive_type_failure_reasons),
+      'adaptive_type_failure_types': dict(adaptive_type_failure_types),
+      'adaptive_type_failure_types_top': top_counts(adaptive_type_failure_types),
+      'adaptive_type_failure_sources': dict(adaptive_type_failure_sources),
+      'adaptive_penalty_applied_events': adaptive_penalty_applied_events,
+      'adaptive_penalized_records': adaptive_penalized_records,
+      'adaptive_penalty_stages': dict(adaptive_penalty_stages),
+      'adaptive_penalty_top_types': dict(adaptive_penalty_top_types),
+      'adaptive_penalty_top_types_top': top_counts(adaptive_penalty_top_types),
+      'adaptive_penalty_max_by_type': {
+          key: round(value, 4)
+          for key, value in sorted(adaptive_penalty_max_by_type.items())
+      },
+      'adaptive_penalized_selected_types': dict(adaptive_penalized_selected_types),
+      'adaptive_penalized_selected_types_top': top_counts(
+          adaptive_penalized_selected_types
+      ),
+      'adaptive_penalized_filtered_types': dict(adaptive_penalized_filtered_types),
+      'adaptive_penalized_filtered_types_top': top_counts(
+          adaptive_penalized_filtered_types
+      ),
+      'adaptive_penalized_error_types': dict(adaptive_penalized_error_types),
+      'adaptive_penalized_error_types_top': top_counts(
+          adaptive_penalized_error_types
+      ),
+      'adaptive_penalized_beam_add_types': dict(adaptive_penalized_beam_add_types),
+      'adaptive_penalized_beam_add_types_top': top_counts(
+          adaptive_penalized_beam_add_types
+      ),
+      'adaptive_penalized_sft_signal_types': dict(
+          adaptive_penalized_sft_signal_types
+      ),
+      'adaptive_penalized_sft_signal_types_top': top_counts(
+          adaptive_penalized_sft_signal_types
       ),
       'candidate_hard_negative_signals': dict(candidate_hard_negative_signals),
       'candidate_hard_negative_signal_types': dict(
@@ -706,6 +797,36 @@ def main() -> None:
   aggregate_candidate_sft_signal_rerank_phases = merge_problem_counter(
       problems, 'candidate_sft_signal_rerank_phases'
   )
+  aggregate_adaptive_type_failure_reasons = merge_problem_counter(
+      problems, 'adaptive_type_failure_reasons'
+  )
+  aggregate_adaptive_type_failure_types = merge_problem_counter(
+      problems, 'adaptive_type_failure_types'
+  )
+  aggregate_adaptive_type_failure_sources = merge_problem_counter(
+      problems, 'adaptive_type_failure_sources'
+  )
+  aggregate_adaptive_penalty_stages = merge_problem_counter(
+      problems, 'adaptive_penalty_stages'
+  )
+  aggregate_adaptive_penalty_top_types = merge_problem_counter(
+      problems, 'adaptive_penalty_top_types'
+  )
+  aggregate_adaptive_penalized_selected_types = merge_problem_counter(
+      problems, 'adaptive_penalized_selected_types'
+  )
+  aggregate_adaptive_penalized_filtered_types = merge_problem_counter(
+      problems, 'adaptive_penalized_filtered_types'
+  )
+  aggregate_adaptive_penalized_error_types = merge_problem_counter(
+      problems, 'adaptive_penalized_error_types'
+  )
+  aggregate_adaptive_penalized_beam_add_types = merge_problem_counter(
+      problems, 'adaptive_penalized_beam_add_types'
+  )
+  aggregate_adaptive_penalized_sft_signal_types = merge_problem_counter(
+      problems, 'adaptive_penalized_sft_signal_types'
+  )
   aggregate_candidate_hard_negative_signals = merge_problem_counter(
       problems, 'candidate_hard_negative_signals'
   )
@@ -846,6 +967,44 @@ def main() -> None:
           ),
           'candidate_sft_signal_rerank_phases': dict(
               aggregate_candidate_sft_signal_rerank_phases
+          ),
+          'adaptive_type_failures': sum(
+              sum(p.get('adaptive_type_failure_reasons', {}).values())
+              for p in problems
+          ),
+          'adaptive_type_failure_reasons': dict(
+              aggregate_adaptive_type_failure_reasons
+          ),
+          'adaptive_type_failure_types_top': top_counts(
+              aggregate_adaptive_type_failure_types
+          ),
+          'adaptive_type_failure_sources': dict(
+              aggregate_adaptive_type_failure_sources
+          ),
+          'adaptive_penalty_applied_events': sum(
+              p.get('adaptive_penalty_applied_events', 0) for p in problems
+          ),
+          'adaptive_penalized_records': sum(
+              p.get('adaptive_penalized_records', 0) for p in problems
+          ),
+          'adaptive_penalty_stages': dict(aggregate_adaptive_penalty_stages),
+          'adaptive_penalty_top_types_top': top_counts(
+              aggregate_adaptive_penalty_top_types
+          ),
+          'adaptive_penalized_selected_types_top': top_counts(
+              aggregate_adaptive_penalized_selected_types
+          ),
+          'adaptive_penalized_filtered_types_top': top_counts(
+              aggregate_adaptive_penalized_filtered_types
+          ),
+          'adaptive_penalized_error_types_top': top_counts(
+              aggregate_adaptive_penalized_error_types
+          ),
+          'adaptive_penalized_beam_add_types_top': top_counts(
+              aggregate_adaptive_penalized_beam_add_types
+          ),
+          'adaptive_penalized_sft_signal_types_top': top_counts(
+              aggregate_adaptive_penalized_sft_signal_types
           ),
           'candidate_hard_negative_signal_types_top': top_counts(
               aggregate_candidate_hard_negative_signal_types

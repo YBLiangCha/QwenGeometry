@@ -1383,13 +1383,67 @@ def solve_one(
     limit = max(0, int(limit or 0))
     if limit <= 0:
       return []
+    threshold = max(1, int(args.candidate_adaptive_type_penalty_threshold))
+    weight = max(0.0, float(args.candidate_adaptive_type_penalty_weight))
+    max_penalty = max(0.0, float(args.candidate_adaptive_type_penalty_max))
+    preference_multiplier = max(
+        0.0, float(args.candidate_adaptive_type_preference_penalty_multiplier)
+    )
     scored = []
     for typ, score in type_bonus_context().items():
       try:
-        scored.append((float(score), typ))
+        adjusted_score = float(score)
       except (TypeError, ValueError):
         continue
+      if (
+          args.candidate_adaptive_type_penalty
+          and args.candidate_adaptive_type_preference_penalty
+          and adaptive_type_failures
+          and preference_multiplier > 0
+      ):
+        adjusted_score -= preference_multiplier * adaptive_type_penalty(
+            adaptive_type_failures.get(typ, 0),
+            threshold,
+            weight,
+            max_penalty,
+        )
+      scored.append((adjusted_score, typ))
     return [typ for _, typ in sorted(scored, reverse=True)[:limit]]
+
+  def adaptive_type_preference_penalty_top(
+      limit: int = 8,
+  ) -> list[dict[str, Any]]:
+    if (
+        not args.candidate_adaptive_type_penalty
+        or not args.candidate_adaptive_type_preference_penalty
+        or not adaptive_type_failures
+    ):
+      return []
+    threshold = max(1, int(args.candidate_adaptive_type_penalty_threshold))
+    weight = max(0.0, float(args.candidate_adaptive_type_penalty_weight))
+    max_penalty = max(0.0, float(args.candidate_adaptive_type_penalty_max))
+    preference_multiplier = max(
+        0.0, float(args.candidate_adaptive_type_preference_penalty_multiplier)
+    )
+    rows = []
+    for typ, failures in adaptive_type_failures.items():
+      penalty = preference_multiplier * adaptive_type_penalty(
+          failures,
+          threshold,
+          weight,
+          max_penalty,
+      )
+      if penalty <= 0:
+        continue
+      rows.append(
+          {
+              'type': typ,
+              'failures': failures,
+              'penalty': round(penalty, 4),
+          }
+      )
+    rows.sort(key=lambda row: (-row['penalty'], -row['failures'], row['type']))
+    return rows[: max(0, int(limit or 0))]
 
   def prompt_preferred_construction_types() -> list[str]:
     return preferred_construction_types(args.candidate_prompt_preferred_type_limit)
@@ -1433,6 +1487,9 @@ def solve_one(
               kind='candidate_prompt_prefix_bias',
               depth=depth,
               preferred_construction_types=preferred_types,
+              adaptive_type_preference_penalty_top=(
+                  adaptive_type_preference_penalty_top()
+              ),
           )
         if preferred_template_types and args.candidate_template_backfill:
           qs.event(
@@ -1442,6 +1499,9 @@ def solve_one(
               preferred_construction_types=preferred_template_types,
               candidate_template_preferred_type_limit=(
                   args.candidate_template_preferred_type_limit
+              ),
+              adaptive_type_preference_penalty_top=(
+                  adaptive_type_preference_penalty_top()
               ),
           )
         candidates = generator.generate(
@@ -2123,6 +2183,9 @@ def solve_one(
             kind='candidate_prompt_prefix_bias',
             depth=depth,
             preferred_construction_types=preferred_types,
+            adaptive_type_preference_penalty_top=(
+                adaptive_type_preference_penalty_top()
+            ),
         )
       if preferred_template_types and args.candidate_template_backfill:
         qs.event(
@@ -2132,6 +2195,9 @@ def solve_one(
             preferred_construction_types=preferred_template_types,
             candidate_template_preferred_type_limit=(
                 args.candidate_template_preferred_type_limit
+            ),
+            adaptive_type_preference_penalty_top=(
+                adaptive_type_preference_penalty_top()
             ),
         )
       candidates = generator.generate(
@@ -2886,6 +2952,21 @@ def parse_args() -> argparse.Namespace:
           'invalid_quad_solve,dep_check_fail,invalid_line_intersect,value_error'
       ),
       help='comma-separated invalid-construction reasons that feed adaptive type penalty',
+  )
+  parser.add_argument(
+      '--candidate_adaptive_type_preference_penalty',
+      action=argparse.BooleanOptionalAction,
+      default=True,
+      help=(
+          'also demote repeatedly failing construction types when ordering '
+          'prompt-prefix and template-backfill preferences'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_adaptive_type_preference_penalty_multiplier',
+      type=float,
+      default=2.0,
+      help='multiplier applied to adaptive type penalties in preference ordering',
   )
   parser.add_argument(
       '--candidate_dynamic_progress_type_anchor',

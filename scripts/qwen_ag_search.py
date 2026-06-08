@@ -142,6 +142,13 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     'on_circum+on_line': 2.2,
     'on_bline+on_pline': 1.9,
     'on_circum+on_dia': 1.8,
+    # Large DDAR-progress families mined from the full v12 reference trace but
+    # missing from the earlier progress coverage map.
+    'on_circum+on_pline': 2.4,
+    'on_pline+on_pline': 1.8,
+    'on_aline+on_tline': 1.8,
+    'eqdistance+on_pline': 1.6,
+    'on_dia+on_dia': 1.5,
     'eqdistance+on_line': 1.8,
     'on_dia': 1.8,
     'on_dia+on_tline': 1.7,
@@ -183,6 +190,15 @@ _SIGNAL_ANCHOR_TYPE_BONUS = {
     # IMO 2020 P1 depth-2 trace: high DDAR progress (delta 40) but this
     # family previously only appeared in the later progress coverage phase.
     'on_bline+on_circum': 3.2,
+    # Strong aggregate DDAR-progress families that were previously only in
+    # progress coverage, so narrow signal-anchor slots could miss them.
+    'on_circum+on_pline': 3.2,
+    'on_bline+on_dia': 3.1,
+    'on_dia+on_tline': 3.0,
+    'on_circle+on_dia': 3.0,
+    'on_aline+on_circle': 2.9,
+    'on_bline+on_pline': 2.8,
+    'on_circum+on_dia': 2.7,
     'eqdistance+on_circum': 3.1,
     'eqdistance+on_tline': 3.1,
     'on_pline+on_tline': 3.1,

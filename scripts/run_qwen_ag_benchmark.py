@@ -1569,6 +1569,7 @@ def parse_args() -> argparse.Namespace:
           'value_model',
           'value_model_diverse',
           'value_model_frontfill_diverse',
+          'value_model_frontfill_progress_diverse',
       ],
       default='none',
       help='optional translated-candidate reranker before DDAR evaluation',

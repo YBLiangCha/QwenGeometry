@@ -91,6 +91,25 @@ _VERIFIER_PRIOR_TYPE_BONUS = {
     'eqdistance+on_tline': 0.5,
     'on_dia+on_tline': 0.5,
 }
+_PROGRESS_SIGNAL_TYPE_BONUS = {
+    # Mined from online DDAR-progress positives in the post-v12 clean traces.
+    # These are not proof labels; they only reserve coverage slots for
+    # construction families that the value model tends to under-rank before
+    # DDAR can observe their effect.
+    'on_tline+on_tline': 4.0,
+    'on_bline+on_dia': 3.5,
+    'on_bline': 3.2,
+    'on_bline+on_bline': 3.0,
+    'on_line+on_line': 2.8,
+    'eqdistance+on_circle': 2.5,
+    'on_bline+on_circum': 2.5,
+    'on_bline+on_circle': 2.3,
+    'on_circle+on_dia': 2.2,
+    'on_circle+on_pline': 2.0,
+    'on_circum+on_tline': 2.0,
+    'on_circum+on_dia': 1.8,
+    'on_dia': 1.8,
+}
 _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG = (
     set(_CONSTRUCTIVE_ARG_ARITY) - {'eqangle3'}
 )
@@ -1020,6 +1039,39 @@ def interleave_ranked_records_by_node(
   return interleaved + missing_node
 
 
+def progress_type_coverage_records(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+  """Order candidates from progress-positive construction families."""
+  buckets: dict[str, list[dict[str, Any]]] = {}
+  for record in records:
+    key = construction_type_key(record['translation'])
+    if key not in _PROGRESS_SIGNAL_TYPE_BONUS:
+      continue
+    buckets.setdefault(key, []).append(record)
+  for bucket in buckets.values():
+    bucket.sort(
+        key=lambda record: float(record.get('_candidate_frontfill_score', 0.0)),
+        reverse=True,
+    )
+  ordered_keys = sorted(
+      buckets,
+      key=lambda key: (-_PROGRESS_SIGNAL_TYPE_BONUS[key], key),
+  )
+  reranked: list[dict[str, Any]] = []
+  while len(reranked) < sum(len(bucket) for bucket in buckets.values()):
+    progressed = False
+    for key in ordered_keys:
+      if buckets[key]:
+        record = buckets[key].pop(0)
+        record['_candidate_progress_type_bonus'] = _PROGRESS_SIGNAL_TYPE_BONUS[key]
+        reranked.append(record)
+        progressed = True
+    if not progressed:
+      break
+  return interleave_ranked_records_by_node(reranked)
+
+
 def rerank_candidate_records(
     records: list[dict[str, Any]],
     strategy: str,
@@ -1042,11 +1094,14 @@ def rerank_candidate_records(
         key=lambda record: record['_candidate_rerank_score'],
         reverse=True,
     )
-  if strategy == 'value_model_frontfill_diverse':
+  if strategy in {
+      'value_model_frontfill_diverse',
+      'value_model_frontfill_progress_diverse',
+  }:
     if value_model is None or secondary_value_model is None:
       raise ValueError(
           '--candidate_value_model and --candidate_secondary_value_model are '
-          'required for value_model_frontfill_diverse rerank'
+          f'required for {strategy} rerank'
       )
     front_records = rerank_candidate_records(
         records,
@@ -1070,6 +1125,14 @@ def rerank_candidate_records(
       selected_ids.add(id(record))
       record['_candidate_rerank_score'] = record.get('_candidate_frontfill_score')
       record['_candidate_rerank_phase'] = 'frontfill'
+    if strategy == 'value_model_frontfill_progress_diverse':
+      for record in progress_type_coverage_records(records):
+        if id(record) in selected_ids:
+          continue
+        selected.append(record)
+        selected_ids.add(id(record))
+        record['_candidate_rerank_score'] = record.get('_candidate_frontfill_score')
+        record['_candidate_rerank_phase'] = 'progress_type_coverage'
     for record in coverage_records:
       if id(record) in selected_ids:
         continue
@@ -2207,6 +2270,7 @@ def parse_args() -> argparse.Namespace:
           'value_model',
           'value_model_diverse',
           'value_model_frontfill_diverse',
+          'value_model_frontfill_progress_diverse',
       ],
       default='none',
       help='optional translated-candidate reranker before DDAR evaluation',

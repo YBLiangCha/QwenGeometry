@@ -1135,8 +1135,15 @@ def type_signal_coverage_records(
     type_bonus: dict[str, float],
     bonus_field: str,
     bucket_score_field: str,
+    extra_type_bonus: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
   """Order candidates from construction families with external signal."""
+  if extra_type_bonus:
+    merged_bonus = dict(type_bonus)
+    for key, value in extra_type_bonus.items():
+      merged_bonus[key] = max(float(value), merged_bonus.get(key, float('-inf')))
+    type_bonus = merged_bonus
+
   def frontfill_score(record: dict[str, Any]) -> float:
     try:
       return float(record.get('_candidate_frontfill_score', 0.0))
@@ -1186,6 +1193,7 @@ def type_signal_coverage_records(
 
 def progress_type_coverage_records(
     records: list[dict[str, Any]],
+    extra_type_bonus: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
   """Order candidates from progress-positive construction families."""
   return type_signal_coverage_records(
@@ -1193,11 +1201,13 @@ def progress_type_coverage_records(
       _PROGRESS_SIGNAL_TYPE_BONUS,
       '_candidate_progress_type_bonus',
       '_candidate_progress_type_bucket_score',
+      extra_type_bonus,
   )
 
 
 def signal_anchor_coverage_records(
     records: list[dict[str, Any]],
+    extra_type_bonus: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
   """Order candidates from solved/SFT-positive construction families."""
   return type_signal_coverage_records(
@@ -1205,6 +1215,7 @@ def signal_anchor_coverage_records(
       _SIGNAL_ANCHOR_TYPE_BONUS,
       '_candidate_signal_anchor_type_bonus',
       '_candidate_signal_anchor_type_bucket_score',
+      extra_type_bonus,
   )
 
 
@@ -1214,6 +1225,7 @@ def rerank_candidate_records(
     value_model: dict[str, Any] | None = None,
     secondary_value_model: dict[str, Any] | None = None,
     frontfill_limit: int = 8,
+    dynamic_progress_type_bonus: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
   """Optionally interleave translated candidates by construction type."""
   if strategy == 'none' or len(records) <= 1:
@@ -1264,7 +1276,9 @@ def rerank_candidate_records(
     if strategy == 'value_model_frontfill_progress_diverse':
       signal_anchor_limit = max(0, min(frontfill_limit, len(records)))
       signal_anchor_count = 0
-      for record in signal_anchor_coverage_records(records):
+      for record in signal_anchor_coverage_records(
+          records, dynamic_progress_type_bonus
+      ):
         if id(record) in selected_ids:
           continue
         selected.append(record)
@@ -1274,7 +1288,9 @@ def rerank_candidate_records(
         signal_anchor_count += 1
         if signal_anchor_count >= signal_anchor_limit:
           break
-      for record in progress_type_coverage_records(records):
+      for record in progress_type_coverage_records(
+          records, dynamic_progress_type_bonus
+      ):
         if id(record) in selected_ids:
           continue
         selected.append(record)

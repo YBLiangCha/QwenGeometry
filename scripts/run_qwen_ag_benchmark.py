@@ -563,6 +563,69 @@ def apply_adaptive_type_penalties(
   return ordered
 
 
+def dynamic_progress_type_bonus(
+    progress_delta_dependencies: int | float,
+    args: argparse.Namespace,
+) -> float:
+  if not getattr(args, 'candidate_dynamic_progress_type_anchor', False):
+    return 0.0
+  try:
+    delta = float(progress_delta_dependencies or 0.0)
+  except (TypeError, ValueError):
+    return 0.0
+  min_delta = max(0.0, float(args.candidate_dynamic_progress_type_min_delta))
+  if delta < min_delta:
+    return 0.0
+  base = max(0.0, float(args.candidate_dynamic_progress_type_bonus_base))
+  weight = max(0.0, float(args.candidate_dynamic_progress_type_bonus_weight))
+  max_bonus = max(0.0, float(args.candidate_dynamic_progress_type_bonus_max))
+  bonus = base + weight * math.log1p(delta - min_delta + 1.0)
+  if max_bonus > 0:
+    bonus = min(max_bonus, bonus)
+  return max(0.0, bonus)
+
+
+def note_dynamic_progress_type_anchor(
+    qs: Any,
+    events_file: str,
+    dynamic_progress_type_bonuses: dict[str, float],
+    problem_name: str,
+    depth: int,
+    raw: str,
+    translation: str,
+    construction_type: str | None,
+    progress_delta_dependencies: int | float,
+    args: argparse.Namespace,
+    source: str = 'lm',
+) -> None:
+  bonus = dynamic_progress_type_bonus(progress_delta_dependencies, args)
+  if bonus <= 0:
+    return
+  construction_type = construction_type or qs.construction_type_key(translation)
+  if not construction_type or construction_type == 'unknown':
+    return
+  previous = dynamic_progress_type_bonuses.get(construction_type, 0.0)
+  if bonus <= previous:
+    return
+  dynamic_progress_type_bonuses[construction_type] = bonus
+  qs.event(
+      events_file,
+      kind='candidate_dynamic_progress_type_anchor',
+      problem=problem_name,
+      depth=depth,
+      raw=raw,
+      translation=translation,
+      candidate_construction_type=construction_type,
+      candidate_source=source,
+      progress_delta_dependencies=progress_delta_dependencies,
+      candidate_dynamic_progress_type_bonus=round(bonus, 4),
+      previous_dynamic_progress_type_bonus=round(previous, 4),
+      candidate_dynamic_progress_type_min_delta=(
+          args.candidate_dynamic_progress_type_min_delta
+      ),
+  )
+
+
 def candidate_unique_backfill_target(args: argparse.Namespace) -> int:
   if args.candidate_eval_limit and args.candidate_eval_limit > 0:
     return max(1, min(args.num_return_sequences, args.candidate_eval_limit))
@@ -1119,6 +1182,7 @@ def solve_one(
   value_model = getattr(args, '_candidate_value_model', None)
   secondary_value_model = getattr(args, '_candidate_secondary_value_model', None)
   adaptive_type_failures: dict[str, int] = {}
+  dynamic_progress_type_bonuses: dict[str, float] = {}
 
   for depth in range(args.search_depth):
     qs.event(events_file, kind='depth_start', depth=depth, nodes=len(beam))
@@ -1267,6 +1331,7 @@ def solve_one(
             value_model,
             secondary_value_model,
             args.candidate_frontfill_limit,
+            dynamic_progress_type_bonuses,
         )
         ranked_node_candidates = apply_adaptive_type_penalties(
             qs,
@@ -1321,6 +1386,7 @@ def solve_one(
           value_model,
           secondary_value_model,
           args.candidate_frontfill_limit,
+          dynamic_progress_type_bonuses,
       )
       ranked_depth_candidates = apply_adaptive_type_penalties(
           qs,
@@ -1521,6 +1587,19 @@ def solve_one(
             args.lm_fact_context_top_k,
         )
         progress_delta = candidate_progress_delta(root, result)
+        note_dynamic_progress_type_anchor(
+            qs,
+            events_file,
+            dynamic_progress_type_bonuses,
+            p.url,
+            depth,
+            raw,
+            translation,
+            qs.construction_type_key(translation),
+            progress_delta,
+            args,
+            source=record.get('source', 'lm'),
+        )
         beam_score = candidate_beam_score(
             record['prev_score'],
             lm_score,
@@ -1673,6 +1752,19 @@ def solve_one(
             args.lm_fact_context_top_k,
         )
         progress_delta = candidate_progress_delta(root, result)
+        note_dynamic_progress_type_anchor(
+            qs,
+            events_file,
+            dynamic_progress_type_bonuses,
+            p.url,
+            depth,
+            item['raw'],
+            item['translation'],
+            item.get('candidate_construction_type'),
+            progress_delta,
+            args,
+            source=item.get('candidate_source') or 'lm',
+        )
         beam_score = candidate_beam_score(
             item['prev_score'],
             item['lm_score'],
@@ -1886,6 +1978,7 @@ def solve_one(
           value_model,
           secondary_value_model,
           args.candidate_frontfill_limit,
+          dynamic_progress_type_bonuses,
       )
       ranked_candidates = apply_adaptive_type_penalties(
           qs,
@@ -2046,6 +2139,19 @@ def solve_one(
             args.lm_fact_context_top_k,
         )
         progress_delta = candidate_progress_delta(root, result)
+        note_dynamic_progress_type_anchor(
+            qs,
+            events_file,
+            dynamic_progress_type_bonuses,
+            p.url,
+            depth,
+            raw,
+            translation,
+            qs.construction_type_key(translation),
+            progress_delta,
+            args,
+            source=record.get('source', 'lm'),
+        )
         beam_score = candidate_beam_score(
             prev_score,
             lm_score,
@@ -2198,6 +2304,19 @@ def solve_one(
             args.lm_fact_context_top_k,
         )
         progress_delta = candidate_progress_delta(root, result)
+        note_dynamic_progress_type_anchor(
+            qs,
+            events_file,
+            dynamic_progress_type_bonuses,
+            p.url,
+            depth,
+            item['raw'],
+            item['translation'],
+            item.get('candidate_construction_type'),
+            progress_delta,
+            args,
+            source=item.get('candidate_source') or 'lm',
+        )
         beam_score = candidate_beam_score(
             item['prev_score'],
             item['lm_score'],
@@ -2375,6 +2494,39 @@ def parse_args() -> argparse.Namespace:
       '--candidate_adaptive_type_penalty_reasons',
       default='point_too_close,point_too_far,point_already_exists,unknown_point',
       help='comma-separated invalid-construction reasons that feed adaptive type penalty',
+  )
+  parser.add_argument(
+      '--candidate_dynamic_progress_type_anchor',
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help=(
+          'within a problem, promote construction types that have already '
+          'produced strong DDAR progress in earlier evaluated candidates'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_dynamic_progress_type_min_delta',
+      type=float,
+      default=60.0,
+      help='minimum added-dependency delta over root before a type gets dynamic coverage',
+  )
+  parser.add_argument(
+      '--candidate_dynamic_progress_type_bonus_base',
+      type=float,
+      default=2.0,
+      help='base coverage bonus for dynamically progress-positive construction types',
+  )
+  parser.add_argument(
+      '--candidate_dynamic_progress_type_bonus_weight',
+      type=float,
+      default=0.08,
+      help='log-scaled extra bonus for dynamic progress above the min delta',
+  )
+  parser.add_argument(
+      '--candidate_dynamic_progress_type_bonus_max',
+      type=float,
+      default=3.2,
+      help='maximum dynamic progress type coverage bonus; <=0 disables cap',
   )
   parser.add_argument(
       '--candidate_timeout_beam_fallback_limit',

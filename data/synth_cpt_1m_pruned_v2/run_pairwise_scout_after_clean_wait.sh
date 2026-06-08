@@ -18,7 +18,8 @@ WAIT_ALLOW_INCOMPLETE=${WAIT_ALLOW_INCOMPLETE:-0}
 SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT:-4}
 SCOUT_TIMEOUT_BEAM_FALLBACK_MODE=${SCOUT_TIMEOUT_BEAM_FALLBACK_MODE:-append}
 SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS:-4}
-SCOUT_TAG=${SCOUT_TAG:-unsolved_v22tail_scout_d16_tc4_tail${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}_fact12_t160_w100_fb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}append_v1}
+SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY:-near_spread}
+SCOUT_TAG=${SCOUT_TAG:-unsolved_v23near_scout_d16_tc4_tail${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}_fact12_t160_w100_fb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}append_v1}
 SCOUT_OUT_DIR=${SCOUT_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${SCOUT_TAG}}
 SCOUT_LOG=${SCOUT_LOG:-outputs/${SCOUT_TAG}.log}
 SCOUT_QUEUE_LOG=${SCOUT_QUEUE_LOG:-outputs/${SCOUT_TAG}.queue.log}
@@ -211,7 +212,7 @@ fi
 
 log "starting pairwise scout: $SCOUT_TAG"
 log "problem_names=$SCOUT_PROBLEM_NAMES"
-log "depth_eval_limit=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT}; depth_type_cap=${SCOUT_CANDIDATE_DEPTH_TYPE_EVAL_CAP}; depth_tail_slots=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}; decode_beam_limit=${SCOUT_CANDIDATE_DECODE_BEAM_LIMIT}; candidate_timeout=${SCOUT_CANDIDATE_DDAR_TIMEOUT}; wall_timeout=${SCOUT_CANDIDATE_WALL_TIMEOUT}; soft_timeout_margin=${SCOUT_CANDIDATE_SOFT_TIMEOUT_MARGIN_SEC}; workers=${SCOUT_CANDIDATE_DDAR_WORKERS}; beam_score=${SCOUT_CANDIDATE_BEAM_SCORE}; progress_weight=${SCOUT_CANDIDATE_BEAM_PROGRESS_WEIGHT}; progress_cap=${SCOUT_CANDIDATE_BEAM_PROGRESS_CAP}; timeout_beam_fallback=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}; timeout_fallback_mode=${SCOUT_TIMEOUT_BEAM_FALLBACK_MODE}; prompt_sampling=${SCOUT_CANDIDATE_PROMPT_SAMPLING}; lm_fact_top_k=${SCOUT_LM_FACT_CONTEXT_TOP_K}; rerank=${SCOUT_RERANK}; frontfill=${SCOUT_FRONTFILL_LIMIT}; value_model=$VALUE_MODEL; secondary_value_model=$SECONDARY_VALUE_MODEL; refresh_value_role=$SCOUT_REFRESH_VALUE_ROLE; value_disable_progress_positives=$SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES"
+log "depth_eval_limit=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT}; depth_type_cap=${SCOUT_CANDIDATE_DEPTH_TYPE_EVAL_CAP}; depth_tail_slots=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}; depth_tail_strategy=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY}; decode_beam_limit=${SCOUT_CANDIDATE_DECODE_BEAM_LIMIT}; candidate_timeout=${SCOUT_CANDIDATE_DDAR_TIMEOUT}; wall_timeout=${SCOUT_CANDIDATE_WALL_TIMEOUT}; soft_timeout_margin=${SCOUT_CANDIDATE_SOFT_TIMEOUT_MARGIN_SEC}; workers=${SCOUT_CANDIDATE_DDAR_WORKERS}; beam_score=${SCOUT_CANDIDATE_BEAM_SCORE}; progress_weight=${SCOUT_CANDIDATE_BEAM_PROGRESS_WEIGHT}; progress_cap=${SCOUT_CANDIDATE_BEAM_PROGRESS_CAP}; timeout_beam_fallback=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}; timeout_fallback_mode=${SCOUT_TIMEOUT_BEAM_FALLBACK_MODE}; prompt_sampling=${SCOUT_CANDIDATE_PROMPT_SAMPLING}; lm_fact_top_k=${SCOUT_LM_FACT_CONTEXT_TOP_K}; rerank=${SCOUT_RERANK}; frontfill=${SCOUT_FRONTFILL_LIMIT}; value_model=$VALUE_MODEL; secondary_value_model=$SECONDARY_VALUE_MODEL; refresh_value_role=$SCOUT_REFRESH_VALUE_ROLE; value_disable_progress_positives=$SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES"
 
 if [ "$DRY_RUN" = "1" ]; then
   log "dry run enabled; scout command not launched"
@@ -249,6 +250,7 @@ xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchm
   --candidate_depth_eval_limit "$SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT" \
   --candidate_depth_type_eval_cap "$SCOUT_CANDIDATE_DEPTH_TYPE_EVAL_CAP" \
   --candidate_depth_tail_eval_slots "$SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS" \
+  --candidate_depth_tail_eval_strategy "$SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY" \
   --candidate_timeout_beam_fallback_limit "$SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT" \
   --candidate_timeout_beam_fallback_mode "$SCOUT_TIMEOUT_BEAM_FALLBACK_MODE" \
   --beam_size "$SCOUT_BEAM_SIZE" \

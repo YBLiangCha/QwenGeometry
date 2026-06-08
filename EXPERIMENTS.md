@@ -1054,6 +1054,25 @@ changes. Tags are the practical version identifiers for this workspace.
 - Full parameter values remain in queue/run logs, so shorter output tags do not
   lose experiment provenance.
 
+### `v23near_tail_strategy_v1`
+
+- Added `--candidate_depth_tail_eval_strategy` to
+  `scripts/run_qwen_ag_benchmark.py`:
+  - `even`: the previous behavior, evenly samples the ranked tail.
+  - `near_spread`: keeps candidates immediately after the depth cutoff, then
+    spreads remaining tail slots to the far end.
+- Rationale: the AG1 reproduction found solved candidates at low but not top
+  ranks such as 18/31.  With `eval_limit=16` and `tail_slots=4`, the previous
+  even strategy selects ranks roughly 16, 26, 37, and 47 in a 48-candidate
+  pool, missing rank 18.  The new `near_spread` strategy selects 16, 17, 18,
+  and 47, preserving both near-cutoff and far-tail coverage.
+- Updated v22/v23 scout and solved-biased hybrid wrappers to default to
+  `near_spread`, with shorter output tags:
+  - `unsolved_v23near_scout_d16_tc4_tail...`
+  - `unsolved_v23near_stage4_d24_tc6_tail...`
+- Analysis/report scripts now aggregate selected tail strategies so future
+  solved cases can be attributed to the actual tail policy.
+
 ## Versioning Rule
 
 - Do not overwrite completed output directories.

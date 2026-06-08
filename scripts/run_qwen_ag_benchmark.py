@@ -423,6 +423,7 @@ def select_depth_candidates_for_eval(
     eval_limit: int,
     type_cap: int,
     tail_slots: int = 0,
+    tail_strategy: str = 'even',
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
   """Pick a depth-level eval pool while delaying over-represented types.
 
@@ -451,6 +452,28 @@ def select_depth_candidates_for_eval(
     tail_pool = records[eval_limit:]
     if len(tail_pool) <= tail_slots:
       tail_selected = list(tail_pool)
+    elif tail_strategy == 'near_spread':
+      # Keep candidates just beyond the cutoff, then spread remaining tail
+      # slots to the far end.  AG1 repros solved cases at ranks such as 18/31,
+      # which an evenly sampled 16+4 tail can skip.
+      near_count = min(tail_slots, len(tail_pool))
+      if tail_slots > 3:
+        near_count = min(near_count, max(3, tail_slots // 2))
+      selected_indexes = list(range(near_count))
+      remaining_slots = tail_slots - len(selected_indexes)
+      far_start = near_count
+      far_len = len(tail_pool) - far_start
+      if remaining_slots > 0 and far_len > 0:
+        if remaining_slots == 1:
+          selected_indexes.append(len(tail_pool) - 1)
+        else:
+          for i in range(remaining_slots):
+            index = far_start + round(
+                i * (far_len - 1) / max(1, remaining_slots - 1)
+            )
+            if index not in selected_indexes:
+              selected_indexes.append(index)
+      tail_selected = [tail_pool[index] for index in sorted(selected_indexes)]
     else:
       # Evenly sample the ranked tail, including the far end.  For example,
       # a 32-candidate AG1-style batch with eval_limit=24 and tail_slots=4
@@ -1114,6 +1137,7 @@ def solve_one(
           args.candidate_depth_eval_limit,
           args.candidate_depth_type_eval_cap,
           args.candidate_depth_tail_eval_slots,
+          args.candidate_depth_tail_eval_strategy,
       )
       for record in pruned_depth_candidates:
         qs.event(
@@ -1131,6 +1155,7 @@ def solve_one(
             candidate_depth_eval_limit=args.candidate_depth_eval_limit,
             candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
             candidate_depth_tail_eval_slots=args.candidate_depth_tail_eval_slots,
+            candidate_depth_tail_eval_strategy=args.candidate_depth_tail_eval_strategy,
             candidate_depth_rank=record.get('_candidate_depth_rank'),
             candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
             source=record.get('source', 'lm'),
@@ -1152,6 +1177,7 @@ def solve_one(
             candidate_depth_eval_limit=args.candidate_depth_eval_limit,
             candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
             candidate_depth_tail_eval_slots=args.candidate_depth_tail_eval_slots,
+            candidate_depth_tail_eval_strategy=args.candidate_depth_tail_eval_strategy,
             candidate_depth_rank=record.get('_candidate_depth_rank'),
             candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
             source=record.get('source', 'lm'),
@@ -1876,6 +1902,15 @@ def parse_args() -> argparse.Namespace:
       help=(
           'reserve this many depth-level DDAR eval slots for evenly sampled '
           'low-rank candidates beyond --candidate_depth_eval_limit; 0 disables'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_depth_tail_eval_strategy',
+      choices=['even', 'near_spread'],
+      default='even',
+      help=(
+          'tail slot selection strategy: even samples the ranked tail; '
+          'near_spread keeps candidates just after the cutoff and spreads the rest'
       ),
   )
   parser.add_argument(

@@ -278,6 +278,7 @@ def analyze_problem(
   candidate_hard_negative_signal_types = Counter()
   candidate_hard_negative_signal_sources = Counter()
   depth_eval_selected_phases = Counter()
+  depth_eval_selected_strategies = Counter()
   depth_eval_selected_rank_bins = Counter()
   depth_eval_selected_ranks: list[float] = []
   depth_eval_selected_types = Counter()
@@ -339,6 +340,9 @@ def analyze_problem(
       record = candidate_record(event, lookup)
       depth_eval_selected_phases[
           event.get('candidate_depth_eval_phase') or 'unknown'
+      ] += 1
+      depth_eval_selected_strategies[
+          event.get('candidate_depth_tail_eval_strategy') or 'unknown'
       ] += 1
       depth_eval_selected_rank_bins[
           rank_bin(event.get('candidate_depth_rank'))
@@ -540,6 +544,7 @@ def analyze_problem(
       'candidate_timeout_config': candidate_timeout_config,
       'depth_eval_selected': sum(depth_eval_selected_phases.values()),
       'depth_eval_selected_phases': dict(depth_eval_selected_phases),
+      'depth_eval_selected_strategies': dict(depth_eval_selected_strategies),
       'depth_eval_selected_rank_bins': dict(depth_eval_selected_rank_bins),
       'depth_eval_selected_rank_summary': num_summary(depth_eval_selected_ranks),
       'depth_eval_selected_construction_types_top': top_counts(
@@ -670,6 +675,9 @@ def main() -> None:
   aggregate_depth_eval_selected_phases = merge_problem_counter(
       problems, 'depth_eval_selected_phases'
   )
+  aggregate_depth_eval_selected_strategies = merge_problem_counter(
+      problems, 'depth_eval_selected_strategies'
+  )
   aggregate_depth_eval_selected_rank_bins = merge_problem_counter(
       problems, 'depth_eval_selected_rank_bins'
   )
@@ -788,6 +796,9 @@ def main() -> None:
               p.get('depth_eval_selected', 0) for p in problems
           ),
           'depth_eval_selected_phases': dict(aggregate_depth_eval_selected_phases),
+          'depth_eval_selected_strategies': dict(
+              aggregate_depth_eval_selected_strategies
+          ),
           'depth_eval_selected_rank_bins': dict(
               aggregate_depth_eval_selected_rank_bins
           ),

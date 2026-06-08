@@ -163,6 +163,8 @@ def render_report(payload: dict[str, Any]) -> str:
       f"- Depth-eval selected: {aggregate.get('depth_eval_selected', 0)}",
       f"- Selected phases: "
       f"{fmt_count_map(aggregate.get('depth_eval_selected_phases'))}",
+      f"- Selected tail strategies: "
+      f"{fmt_count_map(aggregate.get('depth_eval_selected_strategies'))}",
       f"- Selected rank bins: "
       f"{fmt_count_map(aggregate.get('depth_eval_selected_rank_bins'))}",
       f"- Selected construction top: "

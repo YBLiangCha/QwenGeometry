@@ -962,6 +962,66 @@ changes. Tags are the practical version identifiers for this workspace.
   `/root/alphageometry_repro` so the official clean AG1 worktree, checkpoint,
   and meliad dependency can be rebuilt without touching the active Qwen runs.
 
+### `postv12_depth_tail_coverage_ag1_repro_v1`
+
+- Git tags:
+  - `postv12_depth_tail_coverage_ag1_repro_v1`
+  - `ag1_full_waiter_qwen_pipeline_guard_v1`
+  - `postv12_v22tail_wait_queue_v1`
+- Downloaded the official AG1 checkpoint locally and uploaded it to the clean
+  remote worktree:
+  `/root/alphageometry_repro/alphageometry_clean/ag_ckpt_vocab`.
+  Remote SHA256 matched local for `checkpoint_10999999`,
+  `geometry.757.model`, and `geometry.757.vocab`.
+- Brought the clean AG1 reproduction environment to a runnable state:
+  - official AG worktree at `6777cb5`,
+  - meliad pinned to `fc4b0368ee491797e00a8b8ce498d3e19c04d6ba`,
+  - `numericals.py` changed from `TkAgg` to `Agg` for headless execution,
+  - unavailable pinned nightly packages `seqio-nightly` and `tfds-nightly`
+    skipped while keeping stable `seqio`/`tensorflow-datasets`,
+  - CUDA JAX installed as `jaxlib==0.4.6+cuda11.cudnn86`.
+- AG1 smoke test succeeded on `orthocenter`:
+  the LM generated `e = on_line e a c, on_line e b d`, then DDAR proved the
+  goal.  This verifies checkpoint loading, meliad compatibility, LM decoding,
+  and DDAR verification on the clean remote setup.
+- Added `scripts/run_ag1_imo_ag30_benchmark.py`, a version-managed AG1
+  IMO-AG-30 runner that records per-problem events, candidate ranks, scores,
+  translations, DDAR logs, proofs, and summary rows with one LM load.
+- Added `scripts/run_ag1_full_after_gpu_free.sh`, which waits for Qwen
+  benchmark/SFT/queue pipelines to finish before launching AG1 full
+  reproduction with `BATCH_SIZE=32`, `BEAM_SIZE=512`, and `SEARCH_DEPTH=16`.
+- Added `--candidate_depth_tail_eval_slots` to Qwen benchmark depth-level DDAR
+  selection.  When the depth candidate pool exceeds the eval limit, this
+  reserves a small number of slots for evenly sampled low-rank candidates.
+  Selected/pruned events now include candidate depth rank and eval phase.
+- Scout/stage4 defaults now expose tail slots:
+  `SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS=4` and
+  `CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS=4` in the v22tail queue path.
+- Midrun analysis of the active v12 default clean run:
+  - completed 8/16, solved 2:
+    `translated_imo_2000_p6`, `translated_imo_2004_p1`;
+    no newly solved problem beyond the known solved set.
+  - aggregate diagnosis includes heavy `depth_rank_pruned` pressure:
+    57,554 candidates, 51,356 valid candidates, 48,665 filtered by rank.
+  - `translated_imo_2011_p6` is timeout-blocked: 98 valid candidates,
+    48 candidate DDAR wall timeouts, zero completed candidate DDAR results,
+    then beam empty at depth 0.
+  - `translated_imo_2008_p1a`, `translated_imo_2008_p1b`,
+    `translated_imo_2009_p2`, and `translated_imo_2010_p2` show symbolic
+    progress but no closure, suggesting rerank/beam continuation and fact
+    memory are still losing the correct branch.
+  - `translated_imo_2012_p5` is still running in the observed trace and has
+    low root complexity but many rank-pruned candidates.
+- Launched remote waiting queue
+  `scripts/queue_v22tail_after_existing_qwen_pipelines.sh` with PID `1248385`.
+  It waits for existing `/tmp/qwen_ag_scripts_c541dd4` and
+  `/tmp/qwen_ag_scripts_postv12_adaptive_progress_coverage_v1` Qwen pipelines
+  to finish, then starts the v22tail scout and solved-biased hybrid clean
+  rerun from the version-managed main workdir.
+- Main readout: AG1 evidence and current Qwen logs agree that strict depth
+  rank pruning is a plausible score bottleneck.  The next controlled comparison
+  is v22tail after the current/default and existing adaptive queues finish.
+
 ## Versioning Rule
 
 - Do not overwrite completed output directories.

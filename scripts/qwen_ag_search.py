@@ -1035,6 +1035,14 @@ def template_backfill_candidates(
       'eqdistance+on_circle',
       'on_dia+on_tline',
       'on_bline+on_tline',
+      'on_bline+on_circum',
+      'on_line+on_pline',
+      'on_line+on_tline',
+      'on_circle+on_circum',
+      'on_circle+on_dia',
+      'on_bline+on_pline',
+      'eqdistance+on_circum',
+      'on_circum+on_dia',
       'unknown',
   ]
   buckets: list[list[str]] = [[] for _ in bucket_types]
@@ -1132,6 +1140,12 @@ def template_backfill_candidates(
     add(17, f'{new_point} : O {new_point} {c} {d} {e} 00 C {new_point} {a} {b} 01 ;')
     add(20, f'{new_point} : D {new_point} {a} {b} {a} 00 T {new_point} {c} {d} {e} 01 ;')
     add(21, f'{new_point} : D {new_point} {c} {d} {e} 00 C {new_point} {a} {b} 01 ;')
+    add(29, f'{new_point} : D {new_point} {a} {new_point} {b} 00 O {new_point} {c} {d} {e} 01 ;')
+    add(30, f'{new_point} : P {new_point} {c} {d} {e} 00 C {new_point} {a} {b} 01 ;')
+    add(31, f'{new_point} : T {new_point} {c} {d} {e} 00 C {new_point} {a} {b} 01 ;')
+    add(32, f'{new_point} : D {new_point} {a} {b} {a} 00 O {new_point} {c} {d} {e} 01 ;')
+    add(34, f'{new_point} : D {new_point} {a} {new_point} {b} 00 P {new_point} {c} {d} {e} 01 ;')
+    add(36, f'{new_point} : O {new_point} {c} {d} {e} 00 T {new_point} {a} {new_point} {b} 01 ;')
   disjoint_triples = []
   for i, (a, b, c) in enumerate(selected_triples):
     for d, e, f in selected_triples[i + 1 :]:
@@ -1166,6 +1180,8 @@ def template_backfill_candidates(
     add(26, f'{new_point} : D {new_point} {a} {b} {c} 00 D {new_point} {d} {e} {d} 01 ;')
     add(27, f'{new_point} : T {new_point} {a} {new_point} {b} 00 T {new_point} {c} {d} {e} 01 ;')
     add(28, f'{new_point} : D {new_point} {a} {new_point} {b} 00 T {new_point} {c} {d} {e} 01 ;')
+    add(33, f'{new_point} : D {new_point} {a} {b} {a} 00 T {new_point} {c} {new_point} {d} 01 ;')
+    add(35, f'{new_point} : D {new_point} {a} {b} {c} 00 O {new_point} {c} {d} {e} 01 ;')
 
   candidates: list[str] = []
   positions = [0 for _ in buckets]

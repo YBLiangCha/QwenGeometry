@@ -58,6 +58,14 @@ _CANDIDATE_RERANK_EXTRA_KEY_MAP: tuple[tuple[str, str], ...] = (
         '_candidate_progress_type_bucket_score',
         'candidate_progress_type_bucket_score',
     ),
+    (
+        '_candidate_dynamic_progress_type_match_bonus',
+        'candidate_dynamic_progress_type_match_bonus',
+    ),
+    (
+        '_candidate_dynamic_progress_type_match_source',
+        'candidate_dynamic_progress_type_match_source',
+    ),
 )
 _CANDIDATE_RERANK_EXTRA_TASK_KEYS = tuple(
     event_key for _, event_key in _CANDIDATE_RERANK_EXTRA_KEY_MAP

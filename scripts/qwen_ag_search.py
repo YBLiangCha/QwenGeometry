@@ -1407,6 +1407,61 @@ def interleave_ranked_records_by_node(
   return interleaved + missing_node
 
 
+def construction_type_parts(type_key: str) -> list[str]:
+  return [
+      part
+      for part in str(type_key or '').split('+')
+      if part and part != 'unknown'
+  ]
+
+
+def expanded_dynamic_type_bonus(
+    extra_type_bonus: dict[str, float] | None,
+    component_scale: float = 0.75,
+) -> dict[str, float]:
+  """Expand online progress anchors from exact combos to their components."""
+  if not extra_type_bonus:
+    return {}
+  expanded: dict[str, float] = {}
+  scale = max(0.0, float(component_scale))
+  for key, value in extra_type_bonus.items():
+    try:
+      bonus = float(value)
+    except (TypeError, ValueError):
+      continue
+    if bonus <= 0:
+      continue
+    parts = construction_type_parts(key)
+    if not parts:
+      continue
+    expanded[key] = max(bonus, expanded.get(key, float('-inf')))
+    if len(parts) <= 1 or scale <= 0:
+      continue
+    component_bonus = bonus * scale
+    for part in parts:
+      expanded[part] = max(component_bonus, expanded.get(part, float('-inf')))
+  return expanded
+
+
+def dynamic_bonus_for_type_key(
+    type_key: str,
+    expanded_extra_type_bonus: dict[str, float],
+) -> tuple[float | None, str | None]:
+  if not expanded_extra_type_bonus:
+    return None, None
+  exact = expanded_extra_type_bonus.get(type_key)
+  best = exact
+  source = type_key if exact is not None else None
+  for part in construction_type_parts(type_key):
+    component = expanded_extra_type_bonus.get(part)
+    if component is None:
+      continue
+    if best is None or component > best:
+      best = component
+      source = part
+  return best, source
+
+
 def type_signal_coverage_records(
     records: list[dict[str, Any]],
     type_bonus: dict[str, float],
@@ -1415,11 +1470,18 @@ def type_signal_coverage_records(
     extra_type_bonus: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
   """Order candidates from construction families with external signal."""
-  if extra_type_bonus:
-    merged_bonus = dict(type_bonus)
-    for key, value in extra_type_bonus.items():
-      merged_bonus[key] = max(float(value), merged_bonus.get(key, float('-inf')))
-    type_bonus = merged_bonus
+  expanded_extra_type_bonus = expanded_dynamic_type_bonus(extra_type_bonus)
+
+  def lookup_bonus(type_key: str) -> tuple[float | None, float | None, str | None]:
+    base_bonus = type_bonus.get(type_key)
+    dynamic_bonus, dynamic_source = dynamic_bonus_for_type_key(
+        type_key, expanded_extra_type_bonus
+    )
+    if base_bonus is None:
+      return dynamic_bonus, dynamic_bonus, dynamic_source
+    if dynamic_bonus is None or base_bonus >= dynamic_bonus:
+      return base_bonus, None, None
+    return dynamic_bonus, dynamic_bonus, dynamic_source
 
   def frontfill_score(record: dict[str, Any]) -> float:
     try:
@@ -1431,9 +1493,12 @@ def type_signal_coverage_records(
   bucket_scores: dict[str, float] = {}
   for record in records:
     key = construction_type_key(record['translation'])
-    bonus = type_bonus.get(key)
+    bonus, dynamic_bonus, dynamic_source = lookup_bonus(key)
     if bonus is None:
       continue
+    if dynamic_bonus is not None:
+      record['_candidate_dynamic_progress_type_match_bonus'] = dynamic_bonus
+      record['_candidate_dynamic_progress_type_match_source'] = dynamic_source
     buckets.setdefault(key, []).append(record)
     bucket_scores[key] = max(
         bucket_scores.get(key, float('-inf')),
@@ -1448,7 +1513,7 @@ def type_signal_coverage_records(
       buckets,
       key=lambda key: (
           -bucket_scores[key],
-          -type_bonus[key],
+          -(lookup_bonus(key)[0] or 0.0),
           key,
       ),
   )
@@ -1459,7 +1524,7 @@ def type_signal_coverage_records(
     for key in ordered_keys:
       if buckets[key]:
         record = buckets[key].pop(0)
-        record[bonus_field] = type_bonus[key]
+        record[bonus_field] = lookup_bonus(key)[0]
         record[bucket_score_field] = bucket_scores[key]
         reranked.append(record)
         progressed = True

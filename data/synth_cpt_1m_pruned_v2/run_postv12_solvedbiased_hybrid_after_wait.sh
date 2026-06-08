@@ -29,7 +29,7 @@ POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v1}
 SFT_OUT=${SFT_OUT:-outputs/stage4_candidate_signal_solvedbiased_after_v12_${POSTRUN_TAG}}
 BASE_ADAPTER=${BASE_ADAPTER:-outputs/stage3_candidate_signal_after_factctx_lora_qwen2_5_7b_candidate_signal_sft_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_postrun_value_v12_default_v1}
 
-PREFERRED_VALUE_MODEL=${PREFERRED_VALUE_MODEL:-outputs/candidate_value_model_v17_pairwise_postv12_full_timeoutfb4_v1/candidate_value_model.json}
+PREFERRED_VALUE_MODEL=${PREFERRED_VALUE_MODEL:-outputs/candidate_value_model_v18_pairwise_postv12_solvedonly_timeoutfb4_v1/candidate_value_model.json}
 FALLBACK_VALUE_MODEL=${FALLBACK_VALUE_MODEL:-outputs/candidate_value_model_v16_pairwise_solved_biased_progress_filter_oldfull_current4_v1/candidate_value_model.json}
 VALUE_MODEL=${VALUE_MODEL:-$PREFERRED_VALUE_MODEL}
 CLEAN_SECONDARY_VALUE_MODEL=${CLEAN_SECONDARY_VALUE_MODEL:-outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1/candidate_value_model.json}
@@ -40,7 +40,14 @@ CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT=${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT:-4}
 CLEAN_CANDIDATE_DDAR_TIMEOUT=${CLEAN_CANDIDATE_DDAR_TIMEOUT:-200}
 CLEAN_CANDIDATE_WALL_TIMEOUT=${CLEAN_CANDIDATE_WALL_TIMEOUT:-120}
 CLEAN_CANDIDATE_DDAR_WORKERS=${CLEAN_CANDIDATE_DDAR_WORKERS:-8}
-CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_front12_depth24_t200_w120_nrs48_qm3_timeoutfb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}_v1}
+CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v18_front12_depth24_t200_w120_nrs48_qm3_timeoutfb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}_v1}
+
+STAGE4_SIGNAL_MIN_PROGRESS_DELTA=${STAGE4_SIGNAL_MIN_PROGRESS_DELTA:-80}
+STAGE4_SIGNAL_MAX_ELAPSED_SEC=${STAGE4_SIGNAL_MAX_ELAPSED_SEC:-90}
+STAGE4_SIGNAL_MIN_PROGRESS_EFFICIENCY=${STAGE4_SIGNAL_MIN_PROGRESS_EFFICIENCY:-1.0}
+STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_PROBLEM=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_PROBLEM:-8}
+STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_TYPE=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_TYPE:-16}
+STAGE4_SIGNAL_SOLVED_REPEAT=${STAGE4_SIGNAL_SOLVED_REPEAT:-32}
 
 mkdir -p "$(dirname "$QUEUE_LOG")"
 
@@ -168,6 +175,7 @@ log "post-v12 remaining problem names: $CLEAN_PROBLEM_NAMES"
 log "stage4 adapter: $SFT_OUT"
 log "hybrid clean tag: $CLEAN_RERUN_TAG"
 log "hybrid clean timeout beam fallback limit: $CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT"
+log "stage4 signal filters: min_delta=${STAGE4_SIGNAL_MIN_PROGRESS_DELTA}; max_elapsed=${STAGE4_SIGNAL_MAX_ELAPSED_SEC}; min_eff=${STAGE4_SIGNAL_MIN_PROGRESS_EFFICIENCY}; per_problem=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_PROBLEM}; per_type=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_TYPE}; solved_repeat=${STAGE4_SIGNAL_SOLVED_REPEAT}"
 
 if [ "$DRY_RUN" = "1" ]; then
   log "dry run enabled; postrun script not launched"
@@ -183,6 +191,12 @@ env \
   WAIT_FOR_OLD_BENCH=0 \
   POSTRUN_TAG="$POSTRUN_TAG" \
   BASE_ADAPTER="$BASE_ADAPTER" \
+  SIGNAL_MIN_PROGRESS_DELTA="$STAGE4_SIGNAL_MIN_PROGRESS_DELTA" \
+  SIGNAL_MAX_ELAPSED_SEC="$STAGE4_SIGNAL_MAX_ELAPSED_SEC" \
+  SIGNAL_MIN_PROGRESS_EFFICIENCY="$STAGE4_SIGNAL_MIN_PROGRESS_EFFICIENCY" \
+  SIGNAL_MAX_PROGRESS_ROWS_PER_PROBLEM="$STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_PROBLEM" \
+  SIGNAL_MAX_PROGRESS_ROWS_PER_TYPE="$STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_TYPE" \
+  SIGNAL_SOLVED_REPEAT="$STAGE4_SIGNAL_SOLVED_REPEAT" \
   SFT_OUT="$SFT_OUT" \
   RUN_CLEAN_RERUN=1 \
   CLEAN_PROBLEM_NAMES="$CLEAN_PROBLEM_NAMES" \

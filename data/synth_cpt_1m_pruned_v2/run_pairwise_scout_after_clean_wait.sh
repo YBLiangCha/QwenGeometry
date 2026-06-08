@@ -29,9 +29,10 @@ SCOUT_RERANK=${SCOUT_RERANK:-value_model_frontfill_diverse}
 SCOUT_FRONTFILL_LIMIT=${SCOUT_FRONTFILL_LIMIT:-12}
 TRAIN_SCOUT_VALUE_MODEL=${TRAIN_SCOUT_VALUE_MODEL:-0}
 VALUE_MODEL_APPEND_SCRIPT=${VALUE_MODEL_APPEND_SCRIPT:-$SCRIPT_DIR/../data/synth_cpt_1m_pruned_v2/run_value_model_append_partial.sh}
-SCOUT_VALUE_TAG=${SCOUT_VALUE_TAG:-v17_pairwise_postv12_full_timeoutfb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}_v1}
+SCOUT_VALUE_TAG=${SCOUT_VALUE_TAG:-v18_pairwise_postv12_solvedonly_timeoutfb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}_v1}
 SCOUT_VALUE_OUT_DIR=${SCOUT_VALUE_OUT_DIR:-outputs/candidate_value_model_${SCOUT_VALUE_TAG}}
 BASE_VALUE_DATA=${BASE_VALUE_DATA:-outputs/candidate_value_model_v16_pairwise_solved_biased_progress_filter_oldfull_current4_v1/candidate_value_data.jsonl}
+SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES=${SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES:-1}
 SCOUT_VALUE_TRAIN_EXTRA_ARGS=${SCOUT_VALUE_TRAIN_EXTRA_ARGS:-}
 if [ -z "$SCOUT_VALUE_TRAIN_EXTRA_ARGS" ]; then
   SCOUT_VALUE_TRAIN_EXTRA_ARGS="--objective pairwise --train_valid_only --epochs 20 --lr 0.01 --pairwise_negatives_per_positive 16"
@@ -158,6 +159,7 @@ if [ "$TRAIN_SCOUT_VALUE_MODEL" = "1" ]; then
     PARTIAL_OUT_DIR="$WAIT_OUT_DIR" \
     PARTIAL_EVENTS_DIR="$WAIT_OUT_DIR/events" \
     PARTIAL_SUMMARY_JSONL="$WAIT_SUMMARY_JSONL" \
+    VALUE_DISABLE_PROGRESS_POSITIVES="$SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES" \
     VALUE_TRAIN_EXTRA_ARGS="$SCOUT_VALUE_TRAIN_EXTRA_ARGS" \
     bash "$VALUE_MODEL_APPEND_SCRIPT" \
     >> "$SCOUT_QUEUE_LOG" 2>&1
@@ -180,7 +182,7 @@ fi
 
 log "starting pairwise scout: $SCOUT_TAG"
 log "problem_names=$SCOUT_PROBLEM_NAMES"
-log "depth_eval_limit=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate_timeout=${SCOUT_CANDIDATE_DDAR_TIMEOUT}; wall_timeout=${SCOUT_CANDIDATE_WALL_TIMEOUT}; workers=${SCOUT_CANDIDATE_DDAR_WORKERS}; timeout_beam_fallback=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}; rerank=${SCOUT_RERANK}; frontfill=${SCOUT_FRONTFILL_LIMIT}; value_model=$VALUE_MODEL; secondary_value_model=$SECONDARY_VALUE_MODEL"
+log "depth_eval_limit=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate_timeout=${SCOUT_CANDIDATE_DDAR_TIMEOUT}; wall_timeout=${SCOUT_CANDIDATE_WALL_TIMEOUT}; workers=${SCOUT_CANDIDATE_DDAR_WORKERS}; timeout_beam_fallback=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}; rerank=${SCOUT_RERANK}; frontfill=${SCOUT_FRONTFILL_LIMIT}; value_model=$VALUE_MODEL; secondary_value_model=$SECONDARY_VALUE_MODEL; value_disable_progress_positives=$SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES"
 
 if [ "$DRY_RUN" = "1" ]; then
   log "dry run enabled; scout command not launched"

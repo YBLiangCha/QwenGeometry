@@ -64,6 +64,10 @@ CLEAN_BEAM_SIZE=${CLEAN_BEAM_SIZE:-64}
 CLEAN_SEARCH_DEPTH=${CLEAN_SEARCH_DEPTH:-4}
 CLEAN_NUM_RETURN_SEQUENCES=${CLEAN_NUM_RETURN_SEQUENCES:-48}
 CLEAN_CANDIDATE_QUALITY_MULTIPLIER=${CLEAN_CANDIDATE_QUALITY_MULTIPLIER:-3}
+CLEAN_PROBLEM_NAMES=${CLEAN_PROBLEM_NAMES:-translated_imo_2000_p6,translated_imo_2004_p1,translated_imo_2008_p1a,translated_imo_2008_p1b,translated_imo_2008_p6,translated_imo_2009_p2,translated_imo_2010_p2,translated_imo_2011_p6,translated_imo_2012_p5,translated_imo_2014_p4,translated_imo_2015_p3,translated_imo_2018_p1,translated_imo_2019_p2,translated_imo_2019_p6,translated_imo_2020_p1,translated_imo_2021_p3}
+CLEAN_CANDIDATE_RERANK=${CLEAN_CANDIDATE_RERANK:-value_model_diverse}
+CLEAN_SECONDARY_VALUE_MODEL=${CLEAN_SECONDARY_VALUE_MODEL:-}
+CLEAN_FRONTFILL_LIMIT=${CLEAN_FRONTFILL_LIMIT:-8}
 CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_candidate_signal_${POSTRUN_TAG}_value_v12_grammar_semantic_v4_scores_dedup_dupneg_depth${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}_nrs${CLEAN_NUM_RETURN_SEQUENCES}_qm${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}_v1}
 CLEAN_OUT_DIR=${CLEAN_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${CLEAN_RERUN_TAG}}
 VALUE_MODEL=${VALUE_MODEL:-outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1/candidate_value_model.json}
@@ -254,8 +258,20 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     echo "clean rerun output already exists: $CLEAN_OUT_DIR" | tee -a "$LOG" >&2
     exit 1
   fi
+  CLEAN_SECONDARY_VALUE_MODEL_ARGS=()
+  if [ -n "$CLEAN_SECONDARY_VALUE_MODEL" ]; then
+    if [ ! -s "$CLEAN_SECONDARY_VALUE_MODEL" ]; then
+      echo "missing CLEAN_SECONDARY_VALUE_MODEL: $CLEAN_SECONDARY_VALUE_MODEL" | tee -a "$LOG" >&2
+      exit 1
+    fi
+    CLEAN_SECONDARY_VALUE_MODEL_ARGS=(
+      --candidate_secondary_value_model "$CLEAN_SECONDARY_VALUE_MODEL"
+      --candidate_frontfill_limit "$CLEAN_FRONTFILL_LIMIT"
+    )
+  fi
   log "starting clean rerun: $CLEAN_RERUN_TAG"
-  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}"
+  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}; rerank: ${CLEAN_CANDIDATE_RERANK}; frontfill: ${CLEAN_FRONTFILL_LIMIT}; value model: ${VALUE_MODEL}; secondary value model: ${CLEAN_SECONDARY_VALUE_MODEL:-none}"
+  log "clean rerun problem names: ${CLEAN_PROBLEM_NAMES}"
   xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchmark.py" \
     --script_dir "$SCRIPT_DIR" \
     --ag_repo repos/alphageometry \
@@ -264,7 +280,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --rules_file repos/alphageometry/rules.txt \
     --out_dir "$CLEAN_OUT_DIR" \
     --mode qwen \
-    --problem_names translated_imo_2000_p6,translated_imo_2004_p1,translated_imo_2008_p1a,translated_imo_2008_p1b,translated_imo_2008_p6,translated_imo_2009_p2,translated_imo_2010_p2,translated_imo_2011_p6,translated_imo_2012_p5,translated_imo_2014_p4,translated_imo_2015_p3,translated_imo_2018_p1,translated_imo_2019_p2,translated_imo_2019_p6,translated_imo_2020_p1,translated_imo_2021_p3 \
+    --problem_names "$CLEAN_PROBLEM_NAMES" \
     --qwen_model models/Qwen2.5-7B \
     --adapter_path "$SFT_OUT" \
     --dtype bf16 \
@@ -290,8 +306,9 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --candidate_canonical_dedup \
     --candidate_prompt_sampling mixed_constructive \
     --candidate_template_backfill \
-    --candidate_rerank value_model_diverse \
+    --candidate_rerank "$CLEAN_CANDIDATE_RERANK" \
     --candidate_value_model "$VALUE_MODEL" \
+    "${CLEAN_SECONDARY_VALUE_MODEL_ARGS[@]}" \
     --candidate_ddar_workers "$CLEAN_CANDIDATE_DDAR_WORKERS" \
     --lm_fact_context_top_k 8 \
     >> "outputs/${CLEAN_RERUN_TAG}.log" 2>&1

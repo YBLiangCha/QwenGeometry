@@ -24,6 +24,8 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument('--min_efficiency', type=float, default=0.0)
   parser.add_argument('--topn', type=int, default=64)
   parser.add_argument('--per_problem_topn', type=int, default=12)
+  parser.add_argument('--per_problem_bonus_uplift', type=float, default=0.0)
+  parser.add_argument('--per_problem_max_bonus', type=float, default=0.0)
   parser.add_argument('--base_bonus', type=float, default=1.6)
   parser.add_argument('--delta_weight', type=float, default=0.9)
   parser.add_argument('--repeat_weight', type=float, default=0.15)
@@ -208,6 +210,11 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
     problem_rows = []
     for typ, item in type_items.items():
       bonus, ratio_bonus = score_progress_item(args, item, min_delta)
+      if args.per_problem_bonus_uplift > 0:
+        bonus += args.per_problem_bonus_uplift
+      per_problem_max = args.per_problem_max_bonus or args.max_bonus
+      if per_problem_max > 0:
+        bonus = min(per_problem_max, bonus)
       problem_rows.append({
           'type': typ,
           'bonus': round(bonus, 4),
@@ -250,6 +257,8 @@ def mine(args: argparse.Namespace) -> dict[str, Any]:
           'min_efficiency': args.min_efficiency,
           'topn': args.topn,
           'per_problem_topn': args.per_problem_topn,
+          'per_problem_bonus_uplift': args.per_problem_bonus_uplift,
+          'per_problem_max_bonus': args.per_problem_max_bonus,
           'base_bonus': args.base_bonus,
           'delta_weight': args.delta_weight,
           'repeat_weight': args.repeat_weight,

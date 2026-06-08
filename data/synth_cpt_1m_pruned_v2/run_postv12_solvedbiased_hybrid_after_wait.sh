@@ -14,6 +14,8 @@ REFERENCE_OUT_DIR=${REFERENCE_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${REFERE
 REFERENCE_SUMMARY_JSONL=${REFERENCE_SUMMARY_JSONL:-$REFERENCE_OUT_DIR/summary.jsonl}
 REFERENCE_PROCESS_PATTERN=${REFERENCE_PROCESS_PATTERN:-run_qwen_ag_benchmark.py.*${REFERENCE_TAG}}
 REFERENCE_EXPECTED_ROWS=${REFERENCE_EXPECTED_ROWS:-16}
+REFERENCE_MIN_ROWS=${REFERENCE_MIN_ROWS:-1}
+REFERENCE_ALLOW_INCOMPLETE=${REFERENCE_ALLOW_INCOMPLETE:-0}
 
 WAIT_FOR_SCOUT=${WAIT_FOR_SCOUT:-1}
 SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v16_front12_v12_scout_after_v12_depth16_t160_w100_nrs48_qm3_v1}
@@ -111,7 +113,7 @@ log "waiting for reference v12 clean: $REFERENCE_TAG"
 while true; do
   rows=$(summary_rows "$REFERENCE_SUMMARY_JSONL")
   if ! process_active "$REFERENCE_PROCESS_PATTERN"; then
-    if [ "$rows" -ge "$REFERENCE_EXPECTED_ROWS" ]; then
+    if [ "$rows" -ge "$REFERENCE_EXPECTED_ROWS" ] || { [ "$REFERENCE_ALLOW_INCOMPLETE" = "1" ] && [ "$rows" -ge "$REFERENCE_MIN_ROWS" ]; }; then
       break
     fi
     log "reference process ended before expected rows: ${rows}/${REFERENCE_EXPECTED_ROWS}"

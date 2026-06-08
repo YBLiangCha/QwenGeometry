@@ -11,6 +11,7 @@ WAIT_OUT_DIR=${WAIT_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_unsolved_factctx_p
 WAIT_SUMMARY_JSONL=${WAIT_SUMMARY_JSONL:-$WAIT_OUT_DIR/summary.jsonl}
 WAIT_PROCESS_PATTERN=${WAIT_PROCESS_PATTERN:-run_qwen_ag_benchmark.py.*$(basename "$WAIT_OUT_DIR")}
 WAIT_EXPECTED_ROWS=${WAIT_EXPECTED_ROWS:-16}
+WAIT_MIN_ROWS=${WAIT_MIN_ROWS:-1}
 WAIT_INTERVAL=${WAIT_INTERVAL:-300}
 WAIT_ALLOW_INCOMPLETE=${WAIT_ALLOW_INCOMPLETE:-0}
 
@@ -111,7 +112,7 @@ log "waiting for reference clean rerun: $WAIT_OUT_DIR"
 while true; do
   rows=$(summary_rows)
   if ! reference_process_active; then
-    if [ "$rows" -ge "$WAIT_EXPECTED_ROWS" ] || [ "$WAIT_ALLOW_INCOMPLETE" = "1" ]; then
+    if [ "$rows" -ge "$WAIT_EXPECTED_ROWS" ] || { [ "$WAIT_ALLOW_INCOMPLETE" = "1" ] && [ "$rows" -ge "$WAIT_MIN_ROWS" ]; }; then
       break
     fi
     log "reference process ended with only ${rows}/${WAIT_EXPECTED_ROWS} rows"

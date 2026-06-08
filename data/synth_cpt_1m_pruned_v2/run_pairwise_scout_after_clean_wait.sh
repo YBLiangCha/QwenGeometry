@@ -44,6 +44,7 @@ SCOUT_CANDIDATE_DDAR_TIMEOUT=${SCOUT_CANDIDATE_DDAR_TIMEOUT:-160}
 SCOUT_CANDIDATE_WALL_TIMEOUT=${SCOUT_CANDIDATE_WALL_TIMEOUT:-100}
 SCOUT_CANDIDATE_DDAR_WORKERS=${SCOUT_CANDIDATE_DDAR_WORKERS:-8}
 SCOUT_CANDIDATE_BEAM_SCORE=${SCOUT_CANDIDATE_BEAM_SCORE:-rerank_score}
+SCOUT_CANDIDATE_DECODE_BEAM_LIMIT=${SCOUT_CANDIDATE_DECODE_BEAM_LIMIT:-16}
 SCOUT_BEAM_SIZE=${SCOUT_BEAM_SIZE:-64}
 SCOUT_SEARCH_DEPTH=${SCOUT_SEARCH_DEPTH:-4}
 SCOUT_NUM_RETURN_SEQUENCES=${SCOUT_NUM_RETURN_SEQUENCES:-48}
@@ -183,7 +184,7 @@ fi
 
 log "starting pairwise scout: $SCOUT_TAG"
 log "problem_names=$SCOUT_PROBLEM_NAMES"
-log "depth_eval_limit=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate_timeout=${SCOUT_CANDIDATE_DDAR_TIMEOUT}; wall_timeout=${SCOUT_CANDIDATE_WALL_TIMEOUT}; workers=${SCOUT_CANDIDATE_DDAR_WORKERS}; beam_score=${SCOUT_CANDIDATE_BEAM_SCORE}; timeout_beam_fallback=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}; rerank=${SCOUT_RERANK}; frontfill=${SCOUT_FRONTFILL_LIMIT}; value_model=$VALUE_MODEL; secondary_value_model=$SECONDARY_VALUE_MODEL; value_disable_progress_positives=$SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES"
+log "depth_eval_limit=${SCOUT_CANDIDATE_DEPTH_EVAL_LIMIT}; decode_beam_limit=${SCOUT_CANDIDATE_DECODE_BEAM_LIMIT}; candidate_timeout=${SCOUT_CANDIDATE_DDAR_TIMEOUT}; wall_timeout=${SCOUT_CANDIDATE_WALL_TIMEOUT}; workers=${SCOUT_CANDIDATE_DDAR_WORKERS}; beam_score=${SCOUT_CANDIDATE_BEAM_SCORE}; timeout_beam_fallback=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}; rerank=${SCOUT_RERANK}; frontfill=${SCOUT_FRONTFILL_LIMIT}; value_model=$VALUE_MODEL; secondary_value_model=$SECONDARY_VALUE_MODEL; value_disable_progress_positives=$SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES"
 
 if [ "$DRY_RUN" = "1" ]; then
   log "dry run enabled; scout command not launched"
@@ -237,6 +238,7 @@ xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchm
   --candidate_value_model "$VALUE_MODEL" \
   "${SECONDARY_VALUE_MODEL_ARGS[@]}" \
   --candidate_beam_score "$SCOUT_CANDIDATE_BEAM_SCORE" \
+  --candidate_decode_beam_limit "$SCOUT_CANDIDATE_DECODE_BEAM_LIMIT" \
   --candidate_ddar_workers "$SCOUT_CANDIDATE_DDAR_WORKERS" \
   --lm_fact_context_top_k 8 \
   >> "$SCOUT_LOG" 2>&1

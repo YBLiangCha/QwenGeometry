@@ -585,6 +585,29 @@ def candidate_beam_score(
   return prev_score + lm_score
 
 
+def limited_beam_nodes(
+    qs: Any,
+    events_file: str,
+    beam: Any,
+    args: argparse.Namespace,
+    depth: int,
+) -> list[tuple[float, Any]]:
+  ordered = beam.ordered()
+  limit = int(getattr(args, 'candidate_decode_beam_limit', 0) or 0)
+  if limit <= 0 or len(ordered) <= limit:
+    return ordered
+  for score, (_, prompt, _) in ordered[limit:]:
+    qs.event(
+        events_file,
+        kind='beam_decode_pruned',
+        depth=depth,
+        score=score,
+        candidate_decode_beam_limit=limit,
+        prompt_tail=prompt[-240:],
+    )
+  return ordered[:limit]
+
+
 def solve_one(
     p: Any,
     qs: Any,
@@ -643,7 +666,7 @@ def solve_one(
     if args.candidate_depth_eval_limit and args.candidate_depth_eval_limit > 0:
       depth_candidates = []
       for node_index, (prev_score, (g_cur, prompt, pstring)) in enumerate(
-          beam.ordered()
+          limited_beam_nodes(qs, events_file, beam, args, depth)
       ):
         p_cur = pr.Problem.from_txt(pstring, translate=False)
         if g_cur is None:
@@ -991,7 +1014,13 @@ def solve_one(
         qs.event(events_file, kind='beam_empty', depth=depth)
         break
       continue
-    for prev_score, (g_cur, prompt, pstring) in beam.ordered():
+    for prev_score, (g_cur, prompt, pstring) in limited_beam_nodes(
+        qs,
+        events_file,
+        beam,
+        args,
+        depth,
+    ):
       p_cur = pr.Problem.from_txt(pstring, translate=False)
       if g_cur is None:
         g_cur, _ = build_graph_for_symbolic_search(gh, p_cur, qs.DEFINITIONS)
@@ -1449,6 +1478,12 @@ def parse_args() -> argparse.Namespace:
       choices=['lm_score', 'rerank_score', 'lm_plus_rerank'],
       default='lm_score',
       help='score used to keep/order candidate states in the next search beam',
+  )
+  parser.add_argument(
+      '--candidate_decode_beam_limit',
+      type=int,
+      default=0,
+      help='decode only the top-N current beam states per depth; 0 disables',
   )
   parser.add_argument(
       '--candidate_ddar_workers',

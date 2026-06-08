@@ -939,6 +939,29 @@ changes. Tags are the practical version identifiers for this workspace.
   families inconsistently. Reserving coverage slots lets DDAR observe their
   effect before depth-level pruning removes them.
 
+### `ag1_repro_snapshot_analysis_v1`
+
+- Added `scripts/analyze_ag1_repro_logs.py` and
+  `docs/ag1_repro_analysis.md`.
+- Analyzed the local AG1 reproduction snapshot from
+  `alphageometry_repro_results/ag_results_snapshot_20260602_231247`.
+- Snapshot evidence:
+  - Root DDAR solved 14/30, matching the AG1 README/table baseline.
+  - The partial GPU AG1 continuation solved `translated_imo_2000_p6` and
+    `translated_imo_2004_p1` with `batch_size=32`, `beam_size=512`, and
+    `search_depth=16`.
+  - `translated_imo_2000_p6` was solved by the rank-31 candidate
+    `q = on_line q a h, on_tline q b a h`.
+  - `translated_imo_2004_p1` was solved by the rank-18 candidate
+    `k = on_line k e f, on_bline k f e`.
+- Main readout: AG1's high score depends heavily on wide candidate coverage and
+  DDAR verification of low-ranked LM candidates. QwenGeometry should therefore
+  preserve more low-rank valid candidates for DDAR, especially at depth 0/1,
+  and make prune-vs-verify misses explicit in logs.
+- Remote AG1 reproduction setup was started separately under
+  `/root/alphageometry_repro` so the official clean AG1 worktree, checkpoint,
+  and meliad dependency can be rebuilt without touching the active Qwen runs.
+
 ## Versioning Rule
 
 - Do not overwrite completed output directories.

@@ -434,8 +434,88 @@ def repair_candidate_point_name(
   return re.sub(rf'\b{re.escape(old_point)}\b', new_point, text)
 
 
+def _construction_type_prompt_prefixes(
+    new_point: str, construction_type: str
+) -> list[str]:
+  prefixes = []
+  for name in construction_type.split('+'):
+    if name == 'on_line':
+      prefixes.extend([
+          f'{new_point} = on_line {new_point} ',
+          f'{new_point} : C {new_point} ',
+      ])
+    elif name == 'on_circum':
+      prefixes.extend([
+          f'{new_point} = on_circum {new_point} ',
+          f'{new_point} : O {new_point} ',
+      ])
+    elif name == 'on_pline':
+      prefixes.extend([
+          f'{new_point} = on_pline {new_point} ',
+          f'{new_point} : P {new_point} ',
+      ])
+    elif name == 'on_tline':
+      prefixes.extend([
+          f'{new_point} = on_tline {new_point} ',
+          f'{new_point} : T {new_point} ',
+      ])
+    elif name == 'on_circle':
+      prefixes.extend([
+          f'{new_point} = on_circle {new_point} ',
+          f'{new_point} : D {new_point} ',
+      ])
+    elif name == 'eqdistance':
+      prefixes.extend([
+          f'{new_point} = eqdistance {new_point} ',
+          f'{new_point} : D {new_point} ',
+      ])
+    elif name == 'on_bline':
+      prefixes.extend([
+          f'{new_point} = on_bline {new_point} ',
+          f'{new_point} : D {new_point} ',
+      ])
+    elif name == 'on_dia':
+      prefixes.extend([
+          f'{new_point} = on_dia {new_point} ',
+          f'{new_point} : T {new_point} ',
+      ])
+    elif name == 'eqangle3':
+      prefixes.append(f'{new_point} = eqangle3 ')
+    elif name == 'angle_bisector':
+      prefixes.append(f'{new_point} = angle_bisector {new_point} ')
+    elif name == 'angle_mirror':
+      prefixes.append(f'{new_point} = angle_mirror {new_point} ')
+    elif name == 'on_aline':
+      prefixes.append(f'{new_point} = on_aline {new_point} ')
+    elif name == 'on_aline2':
+      prefixes.append(f'{new_point} = on_aline2 {new_point} ')
+  return prefixes
+
+
+def _preferred_prompt_prefixes(
+    new_point: str,
+    preferred_construction_types: list[str] | None,
+    limit: int = 8,
+) -> list[str]:
+  prefixes = []
+  seen = set()
+  for construction_type in preferred_construction_types or []:
+    for prefix in _construction_type_prompt_prefixes(
+        new_point, str(construction_type)
+    ):
+      if prefix in seen:
+        continue
+      prefixes.append(prefix)
+      seen.add(prefix)
+      if len(prefixes) >= limit:
+        return prefixes
+  return prefixes
+
+
 def candidate_prompt_prefixes(
-    strategy: str, forbidden_points: set[str] | None
+    strategy: str,
+    forbidden_points: set[str] | None,
+    preferred_construction_types: list[str] | None = None,
 ) -> list[str]:
   if strategy == 'none':
     return ['']
@@ -471,7 +551,7 @@ def candidate_prompt_prefixes(
         f'{new_point} = on_dia {new_point} ',
         f'{new_point} = eqdistance {new_point} ',
     ])
-  return prefixes
+  return _preferred_prompt_prefixes(new_point, preferred_construction_types) + prefixes
 
 
 def normalize_generated_candidate(text: str) -> str:
@@ -1984,6 +2064,7 @@ class QwenGenerator:
       dsl_token_mask: bool = False,
       point_repair: bool = False,
       prompt_sampling: str = 'none',
+      preferred_construction_types: list[str] | None = None,
   ) -> list[tuple[str, float]]:
     import torch  # pylint: disable=import-outside-toplevel
 
@@ -1991,7 +2072,11 @@ class QwenGenerator:
     # separates the AG state prompt from the target with a single newline.
     do_sample = temperature > 0
     requested_sequences = max(num_return_sequences, 1) * max(candidate_multiplier, 1)
-    prefixes = candidate_prompt_prefixes(prompt_sampling, forbidden_point_names)
+    prefixes = candidate_prompt_prefixes(
+        prompt_sampling,
+        forbidden_point_names,
+        preferred_construction_types,
+    )
     sequences_per_prefix = max(
         1, (requested_sequences + len(prefixes) - 1) // len(prefixes)
     )

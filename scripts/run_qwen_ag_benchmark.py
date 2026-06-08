@@ -1341,6 +1341,14 @@ def solve_one(
             )
             else None
         )
+        preferred_types = preferred_template_construction_types()
+        if preferred_types and args.candidate_prompt_sampling != 'none':
+          qs.event(
+              events_file,
+              kind='candidate_prompt_prefix_bias',
+              depth=depth,
+              preferred_construction_types=preferred_types,
+          )
         candidates = generator.generate(
             prompt,
             args.num_return_sequences,
@@ -1353,6 +1361,7 @@ def solve_one(
             args.candidate_dsl_token_mask,
             args.candidate_point_repair,
             args.candidate_prompt_sampling,
+            preferred_types,
         )
         seen_raw = {raw for raw, _ in candidates}
         candidate_sources = {raw: 'lm' for raw, _ in candidates}
@@ -2002,6 +2011,14 @@ def solve_one(
           )
           else None
       )
+      preferred_types = preferred_template_construction_types()
+      if preferred_types and args.candidate_prompt_sampling != 'none':
+        qs.event(
+            events_file,
+            kind='candidate_prompt_prefix_bias',
+            depth=depth,
+            preferred_construction_types=preferred_types,
+        )
       candidates = generator.generate(
           prompt,
           args.num_return_sequences,
@@ -2014,6 +2031,7 @@ def solve_one(
           args.candidate_dsl_token_mask,
           args.candidate_point_repair,
           args.candidate_prompt_sampling,
+          preferred_types,
       )
       seen_raw = {raw for raw, _ in candidates}
       candidate_sources = {raw: 'lm' for raw, _ in candidates}

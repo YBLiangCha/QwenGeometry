@@ -57,6 +57,7 @@ FORCE_TRAIN=${FORCE_TRAIN:-0}
 RUN_CLEAN_RERUN=${RUN_CLEAN_RERUN:-0}
 CLEAN_CANDIDATE_EVAL_LIMIT=${CLEAN_CANDIDATE_EVAL_LIMIT:-0}
 CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT=${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT:-48}
+CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT=${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT:-0}
 CLEAN_CANDIDATE_DDAR_TIMEOUT=${CLEAN_CANDIDATE_DDAR_TIMEOUT:-240}
 CLEAN_CANDIDATE_WALL_TIMEOUT=${CLEAN_CANDIDATE_WALL_TIMEOUT:-150}
 CLEAN_CANDIDATE_DDAR_WORKERS=${CLEAN_CANDIDATE_DDAR_WORKERS:-8}
@@ -270,7 +271,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     )
   fi
   log "starting clean rerun: $CLEAN_RERUN_TAG"
-  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}; rerank: ${CLEAN_CANDIDATE_RERANK}; frontfill: ${CLEAN_FRONTFILL_LIMIT}; value model: ${VALUE_MODEL}; secondary value model: ${CLEAN_SECONDARY_VALUE_MODEL:-none}"
+  log "clean rerun candidate eval limit: ${CLEAN_CANDIDATE_EVAL_LIMIT}; depth eval limit: ${CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT}; timeout beam fallback: ${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}; candidate timeout: ${CLEAN_CANDIDATE_DDAR_TIMEOUT}; wall timeout: ${CLEAN_CANDIDATE_WALL_TIMEOUT}; workers: ${CLEAN_CANDIDATE_DDAR_WORKERS}; beam: ${CLEAN_BEAM_SIZE}; search depth: ${CLEAN_SEARCH_DEPTH}; nrs: ${CLEAN_NUM_RETURN_SEQUENCES}; quality multiplier: ${CLEAN_CANDIDATE_QUALITY_MULTIPLIER}; rerank: ${CLEAN_CANDIDATE_RERANK}; frontfill: ${CLEAN_FRONTFILL_LIMIT}; value model: ${VALUE_MODEL}; secondary value model: ${CLEAN_SECONDARY_VALUE_MODEL:-none}"
   log "clean rerun problem names: ${CLEAN_PROBLEM_NAMES}"
   xvfb-run -a -s "-screen 0 1024x768x24" python -u "$SCRIPT_DIR/run_qwen_ag_benchmark.py" \
     --script_dir "$SCRIPT_DIR" \
@@ -292,6 +293,7 @@ if [ "$RUN_CLEAN_RERUN" = "1" ]; then
     --candidate_wall_timeout "$CLEAN_CANDIDATE_WALL_TIMEOUT" \
     --candidate_eval_limit "$CLEAN_CANDIDATE_EVAL_LIMIT" \
     --candidate_depth_eval_limit "$CLEAN_CANDIDATE_DEPTH_EVAL_LIMIT" \
+    --candidate_timeout_beam_fallback_limit "$CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT" \
     --beam_size "$CLEAN_BEAM_SIZE" \
     --search_depth "$CLEAN_SEARCH_DEPTH" \
     --num_return_sequences "$CLEAN_NUM_RETURN_SEQUENCES" \

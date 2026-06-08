@@ -499,6 +499,68 @@ def run_candidate_tasks_parallel(
   return sorted(results, key=lambda item: item['order'])
 
 
+def is_candidate_timeout_error(item: dict[str, Any]) -> bool:
+  error = str(item.get('error') or '')
+  return 'Timeout' in error
+
+
+def maybe_add_timeout_beam_fallback(
+    qs: Any,
+    pr: Any,
+    events_file: str,
+    next_beam: Any,
+    timeout_items: list[dict[str, Any]],
+    args: argparse.Namespace,
+) -> None:
+  limit = int(getattr(args, 'candidate_timeout_beam_fallback_limit', 0) or 0)
+  if limit <= 0 or len(next_beam) > 0 or not timeout_items:
+    return
+  ranked = sorted(
+      timeout_items,
+      key=lambda item: (
+          item.get('candidate_rerank_score')
+          if item.get('candidate_rerank_score') is not None
+          else float('-inf'),
+          item.get('prev_score', 0.0) + item.get('lm_score', 0.0),
+          -item.get('order', 0),
+      ),
+      reverse=True,
+  )
+  for fallback_rank, item in enumerate(ranked[:limit], start=1):
+    prompt = (
+        qs.build_lm_prompt_from_problem_text(
+            item['p_new_txt'],
+            pr,
+            qs.DEFINITIONS,
+            None,
+        )
+        if args.lm_fact_context_top_k
+        else item['prompt_next']
+    )
+    next_beam.add(
+        (
+            None,
+            prompt,
+            item['p_new_txt'],
+        ),
+        item.get('prev_score', 0.0) + item.get('lm_score', 0.0),
+    )
+    qs.event(
+        events_file,
+        kind='candidate_timeout_beam_fallback',
+        depth=item.get('depth'),
+        raw=item.get('raw'),
+        translation=item.get('translation'),
+        error=item.get('error'),
+        candidate_rerank_score=item.get('candidate_rerank_score'),
+        candidate_source=item.get('candidate_source'),
+        candidate_construction_type=item.get('candidate_construction_type'),
+        fallback_rank=fallback_rank,
+        fallback_limit=limit,
+        elapsed_sec=item.get('elapsed_sec'),
+    )
+
+
 def solve_one(
     p: Any,
     qs: Any,
@@ -815,6 +877,7 @@ def solve_one(
             ),
             record['prev_score'] + lm_score,
         )
+      timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
         if item.get('error'):
           qs.event(
@@ -830,6 +893,8 @@ def solve_one(
               traceback=item.get('traceback'),
               elapsed_sec=item.get('elapsed_sec'),
           )
+          if is_candidate_timeout_error(item):
+            timeout_items.append(item)
           continue
         result = item['result']
         qs.event(events_file, kind='ddar_done', **result)
@@ -879,6 +944,14 @@ def solve_one(
             ),
             item['prev_score'] + item['lm_score'],
         )
+      maybe_add_timeout_beam_fallback(
+          qs,
+          pr,
+          events_file,
+          next_beam,
+          timeout_items,
+          args,
+      )
       beam = next_beam
       if len(beam) == 0:
         qs.event(events_file, kind='beam_empty', depth=depth)
@@ -1054,6 +1127,7 @@ def solve_one(
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
           ))
+          parallel_tasks[-1]['prev_score'] = prev_score
           continue
         p_new = pr.Problem.from_txt(p_new_txt, translate=False)
         g_new, _ = build_graph_for_symbolic_search(gh, p_new, qs.DEFINITIONS)
@@ -1109,6 +1183,7 @@ def solve_one(
             ),
             prev_score + lm_score,
         )
+      timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
         if item.get('error'):
           qs.event(
@@ -1124,6 +1199,8 @@ def solve_one(
               traceback=item.get('traceback'),
               elapsed_sec=item.get('elapsed_sec'),
           )
+          if is_candidate_timeout_error(item):
+            timeout_items.append(item)
           continue
         result = item['result']
         qs.event(events_file, kind='ddar_done', **result)
@@ -1156,22 +1233,30 @@ def solve_one(
               'aux': item['translation'],
           })
           return row
-      next_beam.add(
-          (
-              None,
-              qs.build_lm_prompt_from_problem_text(
-                  item['p_new_txt'],
-                  pr,
-                  qs.DEFINITIONS,
-                  result.get('fact_context')
-                  if args.lm_fact_context_top_k
-                  else None,
-              )
-              if args.lm_fact_context_top_k
-              else item['prompt_next'],
-              item['p_new_txt'],
-          ),
-          prev_score + item['lm_score'],
+        next_beam.add(
+            (
+                None,
+                qs.build_lm_prompt_from_problem_text(
+                    item['p_new_txt'],
+                    pr,
+                    qs.DEFINITIONS,
+                    result.get('fact_context')
+                    if args.lm_fact_context_top_k
+                    else None,
+                )
+                if args.lm_fact_context_top_k
+                else item['prompt_next'],
+                item['p_new_txt'],
+            ),
+            item['prev_score'] + item['lm_score'],
+        )
+      maybe_add_timeout_beam_fallback(
+          qs,
+          pr,
+          events_file,
+          next_beam,
+          timeout_items,
+          args,
       )
     beam = next_beam
     if len(beam) == 0:
@@ -1220,6 +1305,16 @@ def parse_args() -> argparse.Namespace:
       type=int,
       default=0,
       help='evaluate only the top-N reranked valid candidates per search depth; 0 disables',
+  )
+  parser.add_argument(
+      '--candidate_timeout_beam_fallback_limit',
+      type=int,
+      default=0,
+      help=(
+          'when all parallel candidate DDAR checks at a depth time out, carry '
+          'top-N timed-out candidates into the next beam without fact context; '
+          '0 disables'
+      ),
   )
   parser.add_argument('--qwen_model')
   parser.add_argument('--adapter_path')

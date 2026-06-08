@@ -25,7 +25,7 @@ SCOUT_OUT_DIR=${SCOUT_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${SCOUT_TAG}}
 SCOUT_SUMMARY_JSONL=${SCOUT_SUMMARY_JSONL:-$SCOUT_OUT_DIR/summary.jsonl}
 SCOUT_PROCESS_PATTERN=${SCOUT_PROCESS_PATTERN:-run_pairwise_scout_after_clean_wait.sh|run_qwen_ag_benchmark.py.*${SCOUT_TAG}}
 
-WAIT_INTERVAL=${WAIT_INTERVAL:-300}
+WAIT_INTERVAL=${WAIT_INTERVAL:-60}
 DRY_RUN=${DRY_RUN:-0}
 
 POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v1}

@@ -10,7 +10,7 @@ SCRIPT_DIR=${SCRIPT_DIR:-scripts}
 PIPELINE_DIR=${PIPELINE_DIR:-data/synth_cpt_1m_pruned_v2}
 POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v22tail_v1}
 QUEUE_LOG=${QUEUE_LOG:-outputs/${POSTRUN_TAG}.queue_after_existing.log}
-WAIT_INTERVAL=${WAIT_INTERVAL:-300}
+WAIT_INTERVAL=${WAIT_INTERVAL:-60}
 DRY_RUN=${DRY_RUN:-0}
 
 BLOCKING_PATTERN=${BLOCKING_PATTERN:-/tmp/qwen_ag_scripts_c541dd4|/tmp/qwen_ag_scripts_postv12_adaptive_progress_coverage_v1|run_qwen_ag_benchmark.py|train_qwen_aux_lora.py}

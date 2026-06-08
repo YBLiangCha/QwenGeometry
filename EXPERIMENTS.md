@@ -1096,6 +1096,10 @@ changes. Tags are the practical version identifiers for this workspace.
   synced script while it only had a `sleep 300` child.  New remote PID:
   `1275292`.  This ensures the post-reference handoff uses the current
   `near_spread`/fallback wrappers instead of any earlier bash script state.
+- Handoff polling defaults for the v23near queue, scout wrapper, and hybrid
+  wrapper were reduced from 300s to 60s.  This keeps the scripts lightweight but
+  cuts the post-reference and post-scout idle window before the next stage
+  starts.
 
 ## Versioning Rule
 

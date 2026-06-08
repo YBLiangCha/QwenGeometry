@@ -1043,6 +1043,18 @@ def template_backfill_candidates(
       'on_bline+on_pline',
       'eqdistance+on_circum',
       'on_circum+on_dia',
+      'on_circum+on_pline',
+      'on_bline+on_dia',
+      'on_circle+on_pline',
+      'on_circle+on_circle',
+      'on_pline+on_pline',
+      'on_pline+on_tline',
+      'eqdistance+eqdistance',
+      'eqdistance+on_pline',
+      'eqdistance+on_bline',
+      'on_aline+on_circle',
+      'on_aline+on_tline',
+      'on_dia+on_dia',
       'unknown',
   ]
   buckets: list[list[str]] = [[] for _ in bucket_types]
@@ -1120,6 +1132,9 @@ def template_backfill_candidates(
     add(11, f'{new_point} = angle_mirror {new_point} {a} {b} {c};')
   for a, b, c, d in spread(disjoint_pair_sets, 12):
     add(12, f'{new_point} : T {new_point} {a} {new_point} {b} 00 C {new_point} {c} {d} 01 ;')
+    add(38, f'{new_point} : D {new_point} {a} {new_point} {b} 00 T {new_point} {c} {new_point} {d} 01 ;')
+    add(40, f'{new_point} : D {new_point} {a} {b} {a} 00 D {new_point} {c} {d} {c} 01 ;')
+    add(48, f'{new_point} : T {new_point} {a} {new_point} {b} 00 T {new_point} {c} {new_point} {d} 01 ;')
   pair_triples = []
   seen_pair_triples = set()
   for a, b in selected_pairs:
@@ -1156,6 +1171,9 @@ def template_backfill_candidates(
     add(19, f'{new_point} : T {new_point} {a} {b} {c} 00 T {new_point} {d} {e} {f} 01 ;')
     add(22, f'{new_point} : O {new_point} {a} {b} {c} 00 T {new_point} {d} {e} {f} 01 ;')
     add(23, f'{new_point} : D {new_point} {a} {b} {c} 00 T {new_point} {d} {e} {f} 01 ;')
+    add(41, f'{new_point} : P {new_point} {a} {b} {c} 00 P {new_point} {d} {e} {f} 01 ;')
+    add(42, f'{new_point} : P {new_point} {a} {b} {c} 00 T {new_point} {d} {e} {f} 01 ;')
+    add(43, f'{new_point} : D {new_point} {a} {b} {c} 00 D {new_point} {d} {e} {f} 01 ;')
   selected_quintuples = []
   seen_quintuples = set()
   for a, b in selected_pairs:
@@ -1182,6 +1200,12 @@ def template_backfill_candidates(
     add(28, f'{new_point} : D {new_point} {a} {new_point} {b} 00 T {new_point} {c} {d} {e} 01 ;')
     add(33, f'{new_point} : D {new_point} {a} {b} {a} 00 T {new_point} {c} {new_point} {d} 01 ;')
     add(35, f'{new_point} : D {new_point} {a} {b} {c} 00 O {new_point} {c} {d} {e} 01 ;')
+    add(37, f'{new_point} : O {new_point} {a} {b} {c} 00 P {new_point} {d} {a} {e} 01 ;')
+    add(39, f'{new_point} : D {new_point} {a} {b} {a} 00 P {new_point} {c} {d} {e} 01 ;')
+    add(44, f'{new_point} : D {new_point} {a} {b} {c} 00 P {new_point} {c} {d} {e} 01 ;')
+    add(45, f'{new_point} : D {new_point} {a} {b} {c} 00 D {new_point} {d} {new_point} {e} 01 ;')
+    add(46, f'{new_point} = on_aline {new_point} {a} {b} {c} {d} {e}, on_circle {new_point} {a} {b};')
+    add(47, f'{new_point} = on_aline {new_point} {a} {b} {c} {d} {e}, on_tline {new_point} {d} {a} {e};')
 
   candidates: list[str] = []
   positions = [0 for _ in buckets]

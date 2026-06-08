@@ -278,16 +278,20 @@ def analyze_problem(
   candidate_hard_negative_signal_types = Counter()
   candidate_hard_negative_signal_sources = Counter()
   depth_eval_selected_phases = Counter()
+  depth_eval_selected_rerank_phases = Counter()
   depth_eval_selected_strategies = Counter()
   depth_eval_selected_rank_bins = Counter()
   depth_eval_selected_ranks: list[float] = []
   depth_eval_selected_types = Counter()
   depth_eval_selected_sources = Counter()
   filtered_eval_phases = Counter()
+  filtered_rerank_phases = Counter()
   filtered_rank_bins = Counter()
   candidate_error_eval_phases = Counter()
+  candidate_error_rerank_phases = Counter()
   candidate_error_rank_bins = Counter()
   timeout_eval_phases = Counter()
+  timeout_rerank_phases = Counter()
   timeout_rank_bins = Counter()
   timeout_requested_values: list[float] = []
   timeout_effective_values: list[float] = []
@@ -295,10 +299,13 @@ def analyze_problem(
   candidate_timeout_config: dict[str, Any] = {}
   timeout_fallback_modes = Counter()
   timeout_fallback_phases = Counter()
+  timeout_fallback_rerank_phases = Counter()
   timeout_fallback_rank_bins = Counter()
   timeout_fallback_types = Counter()
   candidate_beam_add_phases = Counter()
+  candidate_beam_add_rerank_phases = Counter()
   candidate_beam_add_rank_bins = Counter()
+  candidate_sft_signal_rerank_phases = Counter()
   solved_event: dict[str, Any] = {}
   root_ddar: dict[str, Any] = {}
   lookup: dict[tuple[int, str], dict[str, str]] = {}
@@ -335,11 +342,15 @@ def analyze_problem(
       filtered_sources[record['source']] += 1
       filtered_types_by_reason.setdefault(reason, Counter())[ctype] += 1
       filtered_eval_phases[event.get('candidate_depth_eval_phase') or 'pruned'] += 1
+      filtered_rerank_phases[event.get('candidate_rerank_phase') or 'unknown'] += 1
       filtered_rank_bins[rank_bin(event.get('candidate_depth_rank'))] += 1
     elif kind == 'candidate_depth_eval_selected':
       record = candidate_record(event, lookup)
       depth_eval_selected_phases[
           event.get('candidate_depth_eval_phase') or 'unknown'
+      ] += 1
+      depth_eval_selected_rerank_phases[
+          event.get('candidate_rerank_phase') or 'unknown'
       ] += 1
       depth_eval_selected_strategies[
           event.get('candidate_depth_tail_eval_strategy') or 'unknown'
@@ -359,11 +370,17 @@ def analyze_problem(
       candidate_error_construction_types[ctype] += 1
       phase = event.get('candidate_depth_eval_phase') or 'unknown'
       candidate_error_eval_phases[phase] += 1
+      candidate_error_rerank_phases[
+          event.get('candidate_rerank_phase') or 'unknown'
+      ] += 1
       candidate_error_rank_bins[rank_bin(event.get('candidate_depth_rank'))] += 1
       error_type = classify_error(event.get('error') or '')
       if error_type == 'timeout':
         timeout_construction_types[ctype] += 1
         timeout_eval_phases[phase] += 1
+        timeout_rerank_phases[
+            event.get('candidate_rerank_phase') or 'unknown'
+        ] += 1
         timeout_rank_bins[rank_bin(event.get('candidate_depth_rank'))] += 1
         for field, target in (
             ('requested_timeout', timeout_requested_values),
@@ -417,6 +434,9 @@ def analyze_problem(
       candidate_sft_signals[event.get('reason') or 'unknown'] += 1
       record = candidate_record(event, lookup)
       candidate_sft_signal_types[record['construction_type']] += 1
+      candidate_sft_signal_rerank_phases[
+          event.get('candidate_rerank_phase') or 'unknown'
+      ] += 1
     elif kind == 'candidate_hard_negative_signal':
       candidate_hard_negative_signals[event.get('reason') or 'unknown'] += 1
       record = candidate_record(event, lookup)
@@ -439,6 +459,9 @@ def analyze_problem(
       timeout_fallback_phases[
           event.get('candidate_depth_eval_phase') or 'unknown'
       ] += 1
+      timeout_fallback_rerank_phases[
+          event.get('candidate_rerank_phase') or 'unknown'
+      ] += 1
       timeout_fallback_rank_bins[
           rank_bin(event.get('candidate_depth_rank'))
       ] += 1
@@ -446,6 +469,9 @@ def analyze_problem(
     elif kind == 'candidate_beam_add':
       candidate_beam_add_phases[
           event.get('candidate_depth_eval_phase') or 'unknown'
+      ] += 1
+      candidate_beam_add_rerank_phases[
+          event.get('candidate_rerank_phase') or 'unknown'
       ] += 1
       candidate_beam_add_rank_bins[
           rank_bin(event.get('candidate_depth_rank'))
@@ -458,6 +484,7 @@ def analyze_problem(
               'aux',
               'candidate_depth_rank',
               'candidate_depth_eval_phase',
+              'candidate_rerank_phase',
               'candidate_rerank_score',
               'candidate_source',
               'candidate_construction_type',
@@ -531,6 +558,9 @@ def analyze_problem(
       'candidate_sft_signals': dict(candidate_sft_signals),
       'candidate_sft_signal_types': dict(candidate_sft_signal_types),
       'candidate_sft_signal_types_top': top_counts(candidate_sft_signal_types),
+      'candidate_sft_signal_rerank_phases': dict(
+          candidate_sft_signal_rerank_phases
+      ),
       'candidate_hard_negative_signals': dict(candidate_hard_negative_signals),
       'candidate_hard_negative_signal_types': dict(
           candidate_hard_negative_signal_types
@@ -544,6 +574,9 @@ def analyze_problem(
       'candidate_timeout_config': candidate_timeout_config,
       'depth_eval_selected': sum(depth_eval_selected_phases.values()),
       'depth_eval_selected_phases': dict(depth_eval_selected_phases),
+      'depth_eval_selected_rerank_phases': dict(
+          depth_eval_selected_rerank_phases
+      ),
       'depth_eval_selected_strategies': dict(depth_eval_selected_strategies),
       'depth_eval_selected_rank_bins': dict(depth_eval_selected_rank_bins),
       'depth_eval_selected_rank_summary': num_summary(depth_eval_selected_ranks),
@@ -552,10 +585,13 @@ def analyze_problem(
       ),
       'depth_eval_selected_sources': dict(depth_eval_selected_sources),
       'filtered_eval_phases': dict(filtered_eval_phases),
+      'filtered_rerank_phases': dict(filtered_rerank_phases),
       'filtered_rank_bins': dict(filtered_rank_bins),
       'candidate_error_eval_phases': dict(candidate_error_eval_phases),
+      'candidate_error_rerank_phases': dict(candidate_error_rerank_phases),
       'candidate_error_rank_bins': dict(candidate_error_rank_bins),
       'timeout_eval_phases': dict(timeout_eval_phases),
+      'timeout_rerank_phases': dict(timeout_rerank_phases),
       'timeout_rank_bins': dict(timeout_rank_bins),
       'timeout_requested_sec': num_summary(timeout_requested_values),
       'timeout_effective_sec': num_summary(timeout_effective_values),
@@ -563,6 +599,9 @@ def analyze_problem(
       'candidate_timeout_beam_fallbacks': sum(timeout_fallback_modes.values()),
       'candidate_timeout_beam_fallback_modes': dict(timeout_fallback_modes),
       'candidate_timeout_beam_fallback_phases': dict(timeout_fallback_phases),
+      'candidate_timeout_beam_fallback_rerank_phases': dict(
+          timeout_fallback_rerank_phases
+      ),
       'candidate_timeout_beam_fallback_rank_bins': dict(
           timeout_fallback_rank_bins
       ),
@@ -570,6 +609,7 @@ def analyze_problem(
           timeout_fallback_types
       ),
       'candidate_beam_add_phases': dict(candidate_beam_add_phases),
+      'candidate_beam_add_rerank_phases': dict(candidate_beam_add_rerank_phases),
       'candidate_beam_add_rank_bins': dict(candidate_beam_add_rank_bins),
       'solved_event': solved_event,
   }
@@ -663,6 +703,9 @@ def main() -> None:
   aggregate_candidate_sft_signal_types = merge_problem_counter(
       problems, 'candidate_sft_signal_types'
   )
+  aggregate_candidate_sft_signal_rerank_phases = merge_problem_counter(
+      problems, 'candidate_sft_signal_rerank_phases'
+  )
   aggregate_candidate_hard_negative_signals = merge_problem_counter(
       problems, 'candidate_hard_negative_signals'
   )
@@ -674,6 +717,9 @@ def main() -> None:
   )
   aggregate_depth_eval_selected_phases = merge_problem_counter(
       problems, 'depth_eval_selected_phases'
+  )
+  aggregate_depth_eval_selected_rerank_phases = merge_problem_counter(
+      problems, 'depth_eval_selected_rerank_phases'
   )
   aggregate_depth_eval_selected_strategies = merge_problem_counter(
       problems, 'depth_eval_selected_strategies'
@@ -687,11 +733,20 @@ def main() -> None:
   aggregate_filtered_eval_phases = merge_problem_counter(
       problems, 'filtered_eval_phases'
   )
+  aggregate_filtered_rerank_phases = merge_problem_counter(
+      problems, 'filtered_rerank_phases'
+  )
   aggregate_filtered_rank_bins = merge_problem_counter(
       problems, 'filtered_rank_bins'
   )
+  aggregate_candidate_error_rerank_phases = merge_problem_counter(
+      problems, 'candidate_error_rerank_phases'
+  )
   aggregate_timeout_eval_phases = merge_problem_counter(
       problems, 'timeout_eval_phases'
+  )
+  aggregate_timeout_rerank_phases = merge_problem_counter(
+      problems, 'timeout_rerank_phases'
   )
   aggregate_timeout_rank_bins = merge_problem_counter(
       problems, 'timeout_rank_bins'
@@ -702,6 +757,9 @@ def main() -> None:
   aggregate_timeout_fallback_phases = merge_problem_counter(
       problems, 'candidate_timeout_beam_fallback_phases'
   )
+  aggregate_timeout_fallback_rerank_phases = merge_problem_counter(
+      problems, 'candidate_timeout_beam_fallback_rerank_phases'
+  )
   aggregate_timeout_fallback_rank_bins = merge_problem_counter(
       problems, 'candidate_timeout_beam_fallback_rank_bins'
   )
@@ -710,6 +768,9 @@ def main() -> None:
   )
   aggregate_candidate_beam_add_phases = merge_problem_counter(
       problems, 'candidate_beam_add_phases'
+  )
+  aggregate_candidate_beam_add_rerank_phases = merge_problem_counter(
+      problems, 'candidate_beam_add_rerank_phases'
   )
   aggregate_candidate_beam_add_rank_bins = merge_problem_counter(
       problems, 'candidate_beam_add_rank_bins'
@@ -783,6 +844,9 @@ def main() -> None:
           'candidate_sft_signal_types_top': top_counts(
               aggregate_candidate_sft_signal_types
           ),
+          'candidate_sft_signal_rerank_phases': dict(
+              aggregate_candidate_sft_signal_rerank_phases
+          ),
           'candidate_hard_negative_signal_types_top': top_counts(
               aggregate_candidate_hard_negative_signal_types
           ),
@@ -796,6 +860,9 @@ def main() -> None:
               p.get('depth_eval_selected', 0) for p in problems
           ),
           'depth_eval_selected_phases': dict(aggregate_depth_eval_selected_phases),
+          'depth_eval_selected_rerank_phases': dict(
+              aggregate_depth_eval_selected_rerank_phases
+          ),
           'depth_eval_selected_strategies': dict(
               aggregate_depth_eval_selected_strategies
           ),
@@ -806,8 +873,13 @@ def main() -> None:
               aggregate_depth_eval_selected_types
           ),
           'filtered_eval_phases': dict(aggregate_filtered_eval_phases),
+          'filtered_rerank_phases': dict(aggregate_filtered_rerank_phases),
           'filtered_rank_bins': dict(aggregate_filtered_rank_bins),
+          'candidate_error_rerank_phases': dict(
+              aggregate_candidate_error_rerank_phases
+          ),
           'timeout_eval_phases': dict(aggregate_timeout_eval_phases),
+          'timeout_rerank_phases': dict(aggregate_timeout_rerank_phases),
           'timeout_rank_bins': dict(aggregate_timeout_rank_bins),
           'candidate_timeout_beam_fallbacks': sum(
               p.get('candidate_timeout_beam_fallbacks', 0) for p in problems
@@ -818,6 +890,9 @@ def main() -> None:
           'candidate_timeout_beam_fallback_phases': dict(
               aggregate_timeout_fallback_phases
           ),
+          'candidate_timeout_beam_fallback_rerank_phases': dict(
+              aggregate_timeout_fallback_rerank_phases
+          ),
           'candidate_timeout_beam_fallback_rank_bins': dict(
               aggregate_timeout_fallback_rank_bins
           ),
@@ -825,6 +900,9 @@ def main() -> None:
               aggregate_timeout_fallback_types
           ),
           'candidate_beam_add_phases': dict(aggregate_candidate_beam_add_phases),
+          'candidate_beam_add_rerank_phases': dict(
+              aggregate_candidate_beam_add_rerank_phases
+          ),
           'candidate_beam_add_rank_bins': dict(
               aggregate_candidate_beam_add_rank_bins
           ),

@@ -87,6 +87,7 @@ def problem_line(problem: dict[str, Any]) -> str:
 def solved_detail(problem: dict[str, Any]) -> str:
   event = problem.get('solved_event') or {}
   phase = event.get('candidate_depth_eval_phase') or '-'
+  rerank_phase = event.get('candidate_rerank_phase') or '-'
   rank = event.get('candidate_depth_rank')
   rank_text = '-' if rank is None else str(rank)
   aux_type = (
@@ -96,7 +97,8 @@ def solved_detail(problem: dict[str, Any]) -> str:
   )
   return (
       f"depth={problem.get('solved_depth')} rank={rank_text} "
-      f"phase={phase} type={aux_type} aux=`{problem.get('aux')}`"
+      f"phase={phase} rerank={rerank_phase} type={aux_type} "
+      f"aux=`{problem.get('aux')}`"
   )
 
 
@@ -163,6 +165,8 @@ def render_report(payload: dict[str, Any]) -> str:
       f"- Depth-eval selected: {aggregate.get('depth_eval_selected', 0)}",
       f"- Selected phases: "
       f"{fmt_count_map(aggregate.get('depth_eval_selected_phases'))}",
+      f"- Selected rerank phases: "
+      f"{fmt_count_map(aggregate.get('depth_eval_selected_rerank_phases'))}",
       f"- Selected tail strategies: "
       f"{fmt_count_map(aggregate.get('depth_eval_selected_strategies'))}",
       f"- Selected rank bins: "
@@ -170,14 +174,20 @@ def render_report(payload: dict[str, Any]) -> str:
       f"- Selected construction top: "
       f"{fmt_count_map(aggregate.get('depth_eval_selected_construction_types_top'))}",
       f"- Filtered phases: {fmt_count_map(aggregate.get('filtered_eval_phases'))}",
+      f"- Filtered rerank phases: "
+      f"{fmt_count_map(aggregate.get('filtered_rerank_phases'))}",
       f"- Filtered rank bins: {fmt_count_map(aggregate.get('filtered_rank_bins'))}",
       f"- Beam-add phases: {fmt_count_map(aggregate.get('candidate_beam_add_phases'))}",
+      f"- Beam-add rerank phases: "
+      f"{fmt_count_map(aggregate.get('candidate_beam_add_rerank_phases'))}",
       f"- Beam-add rank bins: "
       f"{fmt_count_map(aggregate.get('candidate_beam_add_rank_bins'))}",
       '',
       '## Timeout Readout',
       '',
       f"- Timeout phases: {fmt_count_map(aggregate.get('timeout_eval_phases'))}",
+      f"- Timeout rerank phases: "
+      f"{fmt_count_map(aggregate.get('timeout_rerank_phases'))}",
       f"- Timeout rank bins: {fmt_count_map(aggregate.get('timeout_rank_bins'))}",
       f"- Timeout fallback count: "
       f"{aggregate.get('candidate_timeout_beam_fallbacks', 0)}",
@@ -185,6 +195,8 @@ def render_report(payload: dict[str, Any]) -> str:
       f"{fmt_count_map(aggregate.get('candidate_timeout_beam_fallback_modes'))}",
       f"- Timeout fallback phases: "
       f"{fmt_count_map(aggregate.get('candidate_timeout_beam_fallback_phases'))}",
+      f"- Timeout fallback rerank phases: "
+      f"{fmt_count_map(aggregate.get('candidate_timeout_beam_fallback_rerank_phases'))}",
       f"- Timeout fallback rank bins: "
       f"{fmt_count_map(aggregate.get('candidate_timeout_beam_fallback_rank_bins'))}",
       f"- Timeout fallback types: "
@@ -204,6 +216,10 @@ def render_report(payload: dict[str, Any]) -> str:
       f"- Timeout top: {fmt_count_map(aggregate.get('timeout_construction_types_top'))}",
       f"- Hard-negative top: "
       f"{fmt_count_map(aggregate.get('candidate_hard_negative_signal_types_top'))}",
+      f"- SFT signal rerank phases: "
+      f"{fmt_count_map(aggregate.get('candidate_sft_signal_rerank_phases'))}",
+      f"- DDAR error rerank phases: "
+      f"{fmt_count_map(aggregate.get('candidate_error_rerank_phases'))}",
       f"- Solved aux top: "
       f"{fmt_count_map(aggregate.get('solved_aux_construction_types_top'))}",
       '',
@@ -223,6 +239,11 @@ def render_report(payload: dict[str, Any]) -> str:
           '- If timeout rank bins are mostly tail or fallback candidates, reduce '
           'timeout fallback or require a stronger value-model prior before '
           'keeping timed-out branches alive.'
+      ),
+      (
+          '- If a rerank phase dominates selected candidates but contributes no '
+          'beam-add, SFT signal, or solved event, down-weight that phase or move '
+          'its slots behind phases with proven DDAR progress.'
       ),
       (
           '- Candidate SFT data should continue to emphasize solved candidates '

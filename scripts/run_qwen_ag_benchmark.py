@@ -132,6 +132,7 @@ def run_candidate_ddar_worker(task: dict[str, Any]) -> dict[str, Any]:
         'effective_timeout': task.get('timeout'),
         'wall_timeout': task.get('wall_timeout'),
         'candidate_rerank_score': task.get('candidate_rerank_score'),
+        'candidate_rerank_phase': task.get('candidate_rerank_phase'),
         'candidate_source': task.get('candidate_source'),
         'candidate_construction_type': task.get('candidate_construction_type'),
         'levels': len(level_times),
@@ -185,6 +186,7 @@ def make_candidate_task(
     soft_timeout_margin_sec: int | float = 5,
     prompt: str | None = None,
     candidate_rerank_score: float | None = None,
+    candidate_rerank_phase: str | None = None,
     candidate_source: str | None = None,
     candidate_construction_type: str | None = None,
     candidate_depth_rank: int | None = None,
@@ -214,6 +216,7 @@ def make_candidate_task(
       'fact_context_top_k': fact_context_top_k,
       'fact_context_recent_points': [new_point] if new_point else [],
       'candidate_rerank_score': candidate_rerank_score,
+      'candidate_rerank_phase': candidate_rerank_phase,
       'candidate_source': candidate_source,
       'candidate_construction_type': candidate_construction_type,
       'candidate_depth_rank': candidate_depth_rank,
@@ -313,6 +316,7 @@ def maybe_log_candidate_sft_signal(
     candidate_source: str = 'lm',
     candidate_construction_type: str | None = None,
     candidate_rerank_score: float | None = None,
+    candidate_rerank_phase: str | None = None,
 ) -> None:
   if not args.log_candidate_sft_signals or not prompt:
     return
@@ -360,6 +364,7 @@ def maybe_log_candidate_sft_signal(
           candidate_construction_type or qs.construction_type_key(translation)
       ),
       candidate_rerank_score=candidate_rerank_score,
+      candidate_rerank_phase=candidate_rerank_phase,
   )
 
 
@@ -809,6 +814,7 @@ def maybe_add_timeout_beam_fallback(
         translation=item.get('translation'),
         error=item.get('error'),
         candidate_rerank_score=item.get('candidate_rerank_score'),
+        candidate_rerank_phase=item.get('candidate_rerank_phase'),
         candidate_source=item.get('candidate_source'),
         candidate_construction_type=item.get('candidate_construction_type'),
         candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1108,6 +1114,7 @@ def solve_one(
                 reason='rank_pruned',
                 candidate_rerank=args.candidate_rerank,
                 candidate_rerank_score=record.get('_candidate_rerank_score'),
+                candidate_rerank_phase=record.get('_candidate_rerank_phase'),
                 candidate_construction_type=qs.construction_type_key(
                     record['translation']
                 ),
@@ -1149,6 +1156,7 @@ def solve_one(
             reason=record.get('_candidate_depth_prune_reason', 'depth_rank_pruned'),
             candidate_rerank=args.candidate_rerank,
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_rerank_phase=record.get('_candidate_rerank_phase'),
             candidate_construction_type=qs.construction_type_key(
                 record['translation']
             ),
@@ -1173,6 +1181,7 @@ def solve_one(
             translation=translation,
             candidate_rerank=args.candidate_rerank,
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_rerank_phase=record.get('_candidate_rerank_phase'),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_depth_eval_limit=args.candidate_depth_eval_limit,
             candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
@@ -1201,6 +1210,7 @@ def solve_one(
               soft_timeout_margin_sec=args.candidate_soft_timeout_margin_sec,
               prompt=record['prompt'],
               candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_rerank_phase=record.get('_candidate_rerank_phase'),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
               candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -1241,6 +1251,7 @@ def solve_one(
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_rerank_phase=record.get('_candidate_rerank_phase'),
         )
         if result['solved']:
           qs.event(
@@ -1251,6 +1262,7 @@ def solve_one(
               candidate_depth_rank=record.get('_candidate_depth_rank'),
               candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
               candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_rerank_phase=record.get('_candidate_rerank_phase'),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
           )
@@ -1303,6 +1315,7 @@ def solve_one(
                 args, progress_delta
             ),
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_rerank_phase=record.get('_candidate_rerank_phase'),
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -1319,6 +1332,7 @@ def solve_one(
               translation=item['translation'],
               error=item['error'],
               candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_rerank_phase=item.get('candidate_rerank_phase'),
               candidate_source=item.get('candidate_source'),
               candidate_construction_type=item.get('candidate_construction_type'),
               candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1349,6 +1363,7 @@ def solve_one(
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_rerank_score=item.get('candidate_rerank_score'),
+            candidate_rerank_phase=item.get('candidate_rerank_phase'),
         )
         if result['solved']:
           qs.event(
@@ -1359,6 +1374,7 @@ def solve_one(
               candidate_depth_rank=item.get('candidate_depth_rank'),
               candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
               candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_rerank_phase=item.get('candidate_rerank_phase'),
               candidate_source=item.get('candidate_source') or 'lm',
               candidate_construction_type=item.get('candidate_construction_type'),
           )
@@ -1411,6 +1427,7 @@ def solve_one(
                 args, progress_delta
             ),
             candidate_rerank_score=item.get('candidate_rerank_score'),
+            candidate_rerank_phase=item.get('candidate_rerank_phase'),
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1575,6 +1592,7 @@ def solve_one(
               reason='rank_pruned',
               candidate_rerank=args.candidate_rerank,
               candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_rerank_phase=record.get('_candidate_rerank_phase'),
               candidate_construction_type=qs.construction_type_key(
                   record['translation']
               ),
@@ -1605,6 +1623,7 @@ def solve_one(
               soft_timeout_margin_sec=args.candidate_soft_timeout_margin_sec,
               prompt=prompt,
               candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_rerank_phase=record.get('_candidate_rerank_phase'),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
               candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -1645,6 +1664,7 @@ def solve_one(
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_rerank_phase=record.get('_candidate_rerank_phase'),
         )
         if result['solved']:
           qs.event(
@@ -1655,6 +1675,7 @@ def solve_one(
               candidate_depth_rank=record.get('_candidate_depth_rank'),
               candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
               candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_rerank_phase=record.get('_candidate_rerank_phase'),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
           )
@@ -1707,6 +1728,7 @@ def solve_one(
                 args, progress_delta
             ),
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_rerank_phase=record.get('_candidate_rerank_phase'),
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -1723,6 +1745,7 @@ def solve_one(
               translation=item['translation'],
               error=item['error'],
               candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_rerank_phase=item.get('candidate_rerank_phase'),
               candidate_source=item.get('candidate_source'),
               candidate_construction_type=item.get('candidate_construction_type'),
               candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1753,6 +1776,7 @@ def solve_one(
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_rerank_score=item.get('candidate_rerank_score'),
+            candidate_rerank_phase=item.get('candidate_rerank_phase'),
         )
         if result['solved']:
           qs.event(
@@ -1763,6 +1787,7 @@ def solve_one(
               candidate_depth_rank=item.get('candidate_depth_rank'),
               candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
               candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_rerank_phase=item.get('candidate_rerank_phase'),
               candidate_source=item.get('candidate_source') or 'lm',
               candidate_construction_type=item.get('candidate_construction_type'),
           )
@@ -1815,6 +1840,7 @@ def solve_one(
                 args, progress_delta
             ),
             candidate_rerank_score=item.get('candidate_rerank_score'),
+            candidate_rerank_phase=item.get('candidate_rerank_phase'),
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_depth_rank=item.get('candidate_depth_rank'),

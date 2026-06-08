@@ -53,6 +53,34 @@ def raise_candidate_wall_timeout(signum, frame):  # pylint: disable=unused-argum
   raise CandidateWallTimeoutError('candidate DDAR wall-clock timeout')
 
 
+def effective_candidate_ddar_timeout(
+    timeout: int | None,
+    wall_timeout: int | None,
+    margin_sec: int | float = 5,
+) -> int | None:
+  """Keep DDAR's cooperative timeout ahead of the hard wall-clock kill.
+
+  When the wall timer fires first, the worker raises and loses DDAR's partial
+  dependencies.  A slightly shorter cooperative timeout lets DDAR return a
+  normal saturated/timeout result, which can still provide fact context and a
+  progress signal for the next beam.
+  """
+  if timeout is None or wall_timeout is None:
+    return timeout
+  try:
+    timeout_int = int(timeout)
+    wall_timeout_int = int(wall_timeout)
+    margin = int(float(margin_sec))
+  except (TypeError, ValueError):
+    return timeout
+  if timeout_int <= 0 or wall_timeout_int <= 0 or margin <= 0:
+    return timeout_int
+  if timeout_int < wall_timeout_int:
+    return timeout_int
+  dynamic_margin = min(margin, max(1, wall_timeout_int // 20))
+  return max(1, wall_timeout_int - dynamic_margin)
+
+
 def init_candidate_ddar_worker(
     script_dir: str,
     ag_repo: str,
@@ -100,6 +128,9 @@ def run_candidate_ddar_worker(task: dict[str, Any]) -> dict[str, Any]:
         'tag': task['tag'],
         'status': status,
         'solved': solved,
+        'requested_timeout': task.get('requested_timeout'),
+        'effective_timeout': task.get('timeout'),
+        'wall_timeout': task.get('wall_timeout'),
         'candidate_rerank_score': task.get('candidate_rerank_score'),
         'candidate_source': task.get('candidate_source'),
         'candidate_construction_type': task.get('candidate_construction_type'),
@@ -127,6 +158,9 @@ def run_candidate_ddar_worker(task: dict[str, Any]) -> dict[str, Any]:
         'error': type(exc).__name__,
         'traceback': traceback.format_exc(),
         'elapsed_sec': round(time.time() - started, 3),
+        'requested_timeout': task.get('requested_timeout'),
+        'effective_timeout': task.get('timeout'),
+        'wall_timeout': task.get('wall_timeout'),
     }
   finally:
     if wall_timeout:
@@ -147,6 +181,8 @@ def make_candidate_task(
     timeout: int,
     wall_timeout: int | None,
     fact_context_top_k: int = 0,
+    requested_timeout: int | None = None,
+    soft_timeout_margin_sec: int | float = 5,
     prompt: str | None = None,
     candidate_rerank_score: float | None = None,
     candidate_source: str | None = None,
@@ -170,7 +206,9 @@ def make_candidate_task(
       'prompt': prompt,
       'max_level': max_level,
       'timeout': timeout,
+      'requested_timeout': requested_timeout if requested_timeout is not None else timeout,
       'wall_timeout': wall_timeout,
+      'soft_timeout_margin_sec': soft_timeout_margin_sec,
       'fact_context_top_k': fact_context_top_k,
       'fact_context_recent_points': [new_point] if new_point else [],
       'candidate_rerank_score': candidate_rerank_score,
@@ -827,6 +865,19 @@ def solve_one(
   candidate_max_level = args.candidate_max_level or args.max_level
   candidate_timeout = args.candidate_ddar_timeout or args.ddar_timeout
   candidate_wall_timeout = args.candidate_wall_timeout or candidate_timeout
+  candidate_solve_timeout = effective_candidate_ddar_timeout(
+      candidate_timeout,
+      candidate_wall_timeout,
+      args.candidate_soft_timeout_margin_sec,
+  )
+  qs.event(
+      events_file,
+      kind='candidate_timeout_config',
+      requested_timeout=candidate_timeout,
+      effective_timeout=candidate_solve_timeout,
+      wall_timeout=candidate_wall_timeout,
+      soft_timeout_margin_sec=args.candidate_soft_timeout_margin_sec,
+  )
   value_model = getattr(args, '_candidate_value_model', None)
   secondary_value_model = getattr(args, '_candidate_secondary_value_model', None)
 
@@ -1039,9 +1090,11 @@ def solve_one(
               p_new_txt,
               prompt_next,
               candidate_max_level,
-              candidate_timeout,
+              candidate_solve_timeout,
               candidate_wall_timeout,
               args.lm_fact_context_top_k,
+              requested_timeout=candidate_timeout,
+              soft_timeout_margin_sec=args.candidate_soft_timeout_margin_sec,
               prompt=record['prompt'],
               candidate_rerank_score=record.get('_candidate_rerank_score'),
               candidate_source=record.get('source', 'lm'),
@@ -1058,12 +1111,15 @@ def solve_one(
             ddar,
             gh,
             candidate_max_level,
-            candidate_timeout,
+            candidate_solve_timeout,
             events_file,
             f'depth{depth}:{raw}',
             args.lm_fact_context_top_k,
             {qs.candidate_new_point(raw)} if qs.candidate_new_point(raw) else None,
         )
+        result['requested_timeout'] = candidate_timeout
+        result['effective_timeout'] = candidate_solve_timeout
+        result['wall_timeout'] = candidate_wall_timeout
         maybe_log_candidate_sft_signal(
             qs,
             events_file,
@@ -1149,6 +1205,9 @@ def solve_one(
               candidate_construction_type=item.get('candidate_construction_type'),
               traceback=item.get('traceback'),
               elapsed_sec=item.get('elapsed_sec'),
+              requested_timeout=item.get('requested_timeout'),
+              effective_timeout=item.get('effective_timeout'),
+              wall_timeout=item.get('wall_timeout'),
           )
           if is_candidate_timeout_error(item):
             timeout_items.append(item)
@@ -1412,9 +1471,11 @@ def solve_one(
               p_new_txt,
               prompt_next,
               candidate_max_level,
-              candidate_timeout,
+              candidate_solve_timeout,
               candidate_wall_timeout,
               args.lm_fact_context_top_k,
+              requested_timeout=candidate_timeout,
+              soft_timeout_margin_sec=args.candidate_soft_timeout_margin_sec,
               prompt=prompt,
               candidate_rerank_score=record.get('_candidate_rerank_score'),
               candidate_source=record.get('source', 'lm'),
@@ -1431,12 +1492,15 @@ def solve_one(
             ddar,
             gh,
             candidate_max_level,
-            candidate_timeout,
+            candidate_solve_timeout,
             events_file,
             f'depth{depth}:{raw}',
             args.lm_fact_context_top_k,
             {qs.candidate_new_point(raw)} if qs.candidate_new_point(raw) else None,
         )
+        result['requested_timeout'] = candidate_timeout
+        result['effective_timeout'] = candidate_solve_timeout
+        result['wall_timeout'] = candidate_wall_timeout
         maybe_log_candidate_sft_signal(
             qs,
             events_file,
@@ -1522,6 +1586,9 @@ def solve_one(
               candidate_construction_type=item.get('candidate_construction_type'),
               traceback=item.get('traceback'),
               elapsed_sec=item.get('elapsed_sec'),
+              requested_timeout=item.get('requested_timeout'),
+              effective_timeout=item.get('effective_timeout'),
+              wall_timeout=item.get('wall_timeout'),
           )
           if is_candidate_timeout_error(item):
             timeout_items.append(item)
@@ -1646,6 +1713,16 @@ def parse_args() -> argparse.Namespace:
       '--candidate_wall_timeout',
       type=int,
       help='hard wall-clock timeout for each candidate DDAR worker',
+  )
+  parser.add_argument(
+      '--candidate_soft_timeout_margin_sec',
+      type=int,
+      default=5,
+      help=(
+          'when a candidate wall timeout is active, reduce DDAR timeout by up '
+          'to this many seconds so DDAR can return partial facts before SIGALRM; '
+          '0 disables'
+      ),
   )
   parser.add_argument(
       '--candidate_eval_limit',

@@ -186,7 +186,11 @@ def make_candidate_task(
     soft_timeout_margin_sec: int | float = 5,
     prompt: str | None = None,
     candidate_rerank_score: float | None = None,
+    candidate_base_rerank_score: float | None = None,
     candidate_rerank_phase: str | None = None,
+    candidate_adaptive_type_failures: int | None = None,
+    candidate_adaptive_type_penalty: float | None = None,
+    candidate_adaptive_penalty_stage: str | None = None,
     candidate_source: str | None = None,
     candidate_construction_type: str | None = None,
     candidate_depth_rank: int | None = None,
@@ -216,7 +220,11 @@ def make_candidate_task(
       'fact_context_top_k': fact_context_top_k,
       'fact_context_recent_points': [new_point] if new_point else [],
       'candidate_rerank_score': candidate_rerank_score,
+      'candidate_base_rerank_score': candidate_base_rerank_score,
       'candidate_rerank_phase': candidate_rerank_phase,
+      'candidate_adaptive_type_failures': candidate_adaptive_type_failures,
+      'candidate_adaptive_type_penalty': candidate_adaptive_type_penalty,
+      'candidate_adaptive_penalty_stage': candidate_adaptive_penalty_stage,
       'candidate_source': candidate_source,
       'candidate_construction_type': candidate_construction_type,
       'candidate_depth_rank': candidate_depth_rank,
@@ -377,6 +385,10 @@ def candidate_construction_type_for_event(qs: Any, raw: str, translation: str) -
     return 'error'
 
 
+def csv_arg_set(value: str | None) -> set[str]:
+  return {item.strip() for item in str(value or '').split(',') if item.strip()}
+
+
 def maybe_log_candidate_hard_negative_signal(
     qs: Any,
     events_file: str,
@@ -412,6 +424,135 @@ def maybe_log_candidate_hard_negative_signal(
           qs, raw, translation
       ),
   )
+
+
+def note_adaptive_type_failure(
+    qs: Any,
+    events_file: str,
+    adaptive_type_failures: dict[str, int],
+    problem_name: str,
+    depth: int,
+    raw: str,
+    translation: str,
+    args: argparse.Namespace,
+    source: str = 'lm',
+) -> None:
+  if not args.candidate_adaptive_type_penalty:
+    return
+  reason = qs.candidate_value_error_key(translation)
+  if reason not in csv_arg_set(args.candidate_adaptive_type_penalty_reasons):
+    return
+  construction_type = candidate_construction_type_for_event(qs, raw, translation)
+  if not construction_type or construction_type == 'error':
+    return
+  failures = adaptive_type_failures.get(construction_type, 0) + 1
+  adaptive_type_failures[construction_type] = failures
+  threshold = max(1, int(args.candidate_adaptive_type_penalty_threshold))
+  if failures == threshold or (
+      failures > threshold and failures % max(threshold, 16) == 0
+  ):
+    qs.event(
+        events_file,
+        kind='candidate_adaptive_type_failure',
+        problem=problem_name,
+        depth=depth,
+        raw=raw,
+        translation=translation,
+        reason=reason,
+        source=source,
+        candidate_construction_type=construction_type,
+        candidate_adaptive_type_failures=failures,
+        candidate_adaptive_type_penalty_threshold=threshold,
+    )
+
+
+def adaptive_type_penalty(
+    failures: int,
+    threshold: int,
+    weight: float,
+    max_penalty: float,
+) -> float:
+  if failures < threshold:
+    return 0.0
+  penalty = weight * math.log1p(failures - threshold + 1)
+  if max_penalty > 0:
+    penalty = min(max_penalty, penalty)
+  return max(0.0, penalty)
+
+
+def apply_adaptive_type_penalties(
+    qs: Any,
+    events_file: str,
+    records: list[dict[str, Any]],
+    adaptive_type_failures: dict[str, int],
+    args: argparse.Namespace,
+    depth: int,
+    stage: str,
+) -> list[dict[str, Any]]:
+  if (
+      not args.candidate_adaptive_type_penalty
+      or not records
+      or not adaptive_type_failures
+  ):
+    return records
+  threshold = max(1, int(args.candidate_adaptive_type_penalty_threshold))
+  weight = max(0.0, float(args.candidate_adaptive_type_penalty_weight))
+  max_penalty = max(0.0, float(args.candidate_adaptive_type_penalty_max))
+  penalized = []
+  for index, record in enumerate(records):
+    construction_type = qs.construction_type_key(record['translation'])
+    failures = adaptive_type_failures.get(construction_type, 0)
+    penalty = adaptive_type_penalty(failures, threshold, weight, max_penalty)
+    if penalty <= 0:
+      continue
+    try:
+      base_score = float(record.get('_candidate_rerank_score', 0.0))
+    except (TypeError, ValueError):
+      base_score = 0.0
+    adjusted_score = base_score - penalty
+    record['_candidate_base_rerank_score'] = base_score
+    record['_candidate_rerank_score'] = adjusted_score
+    record['_candidate_adaptive_type_failures'] = failures
+    record['_candidate_adaptive_type_penalty'] = penalty
+    record['_candidate_adaptive_penalty_stage'] = stage
+    penalized.append((index, record, construction_type, failures, penalty))
+  if not penalized:
+    return records
+  ordered = [
+      record
+      for _, record in sorted(
+          enumerate(records),
+          key=lambda item: (
+              -float(item[1].get('_candidate_rerank_score', 0.0)),
+              item[0],
+          ),
+      )
+  ]
+  if hasattr(qs, 'interleave_ranked_records_by_node'):
+    ordered = qs.interleave_ranked_records_by_node(ordered)
+  top = sorted(
+      (
+          {
+              'construction_type': construction_type,
+              'failures': failures,
+              'penalty': round(penalty, 4),
+          }
+          for _, _, construction_type, failures, penalty in penalized
+      ),
+      key=lambda item: (-item['penalty'], -item['failures'], item['construction_type']),
+  )[:8]
+  qs.event(
+      events_file,
+      kind='candidate_adaptive_type_penalty_applied',
+      depth=depth,
+      stage=stage,
+      penalized_records=len(penalized),
+      candidate_adaptive_type_penalty_threshold=threshold,
+      candidate_adaptive_type_penalty_weight=weight,
+      candidate_adaptive_type_penalty_max=max_penalty,
+      top_penalized=top,
+  )
+  return ordered
 
 
 def candidate_unique_backfill_target(args: argparse.Namespace) -> int:
@@ -969,6 +1110,7 @@ def solve_one(
   )
   value_model = getattr(args, '_candidate_value_model', None)
   secondary_value_model = getattr(args, '_candidate_secondary_value_model', None)
+  adaptive_type_failures: dict[str, int] = {}
 
   for depth in range(args.search_depth):
     qs.event(events_file, kind='depth_start', depth=depth, nodes=len(beam))
@@ -1058,6 +1200,17 @@ def solve_one(
               args,
               source=source,
           )
+          note_adaptive_type_failure(
+              qs,
+              events_file,
+              adaptive_type_failures,
+              p.url,
+              depth,
+              raw,
+              translation,
+              args,
+              source=source,
+          )
           if translation.startswith('ERROR:'):
             continue
           canonical_key = qs.canonical_aux_key(translation)
@@ -1107,6 +1260,15 @@ def solve_one(
             secondary_value_model,
             args.candidate_frontfill_limit,
         )
+        ranked_node_candidates = apply_adaptive_type_penalties(
+            qs,
+            events_file,
+            ranked_node_candidates,
+            adaptive_type_failures,
+            args,
+            depth,
+            'node',
+        )
         if args.candidate_eval_limit and args.candidate_eval_limit > 0:
           for record in ranked_node_candidates[args.candidate_eval_limit:]:
             qs.event(
@@ -1118,7 +1280,17 @@ def solve_one(
                 reason='rank_pruned',
                 candidate_rerank=args.candidate_rerank,
                 candidate_rerank_score=record.get('_candidate_rerank_score'),
+                candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
                 candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+                candidate_adaptive_type_failures=record.get(
+                    '_candidate_adaptive_type_failures'
+                ),
+                candidate_adaptive_type_penalty=record.get(
+                    '_candidate_adaptive_type_penalty'
+                ),
+                candidate_adaptive_penalty_stage=record.get(
+                    '_candidate_adaptive_penalty_stage'
+                ),
                 candidate_construction_type=qs.construction_type_key(
                     record['translation']
                 ),
@@ -1142,6 +1314,15 @@ def solve_one(
           secondary_value_model,
           args.candidate_frontfill_limit,
       )
+      ranked_depth_candidates = apply_adaptive_type_penalties(
+          qs,
+          events_file,
+          ranked_depth_candidates,
+          adaptive_type_failures,
+          args,
+          depth,
+          'depth',
+      )
       eval_depth_candidates, pruned_depth_candidates = select_depth_candidates_for_eval(
           qs,
           ranked_depth_candidates,
@@ -1160,7 +1341,17 @@ def solve_one(
             reason=record.get('_candidate_depth_prune_reason', 'depth_rank_pruned'),
             candidate_rerank=args.candidate_rerank,
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
             candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+            candidate_adaptive_type_failures=record.get(
+                '_candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=record.get(
+                '_candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=record.get(
+                '_candidate_adaptive_penalty_stage'
+            ),
             candidate_construction_type=qs.construction_type_key(
                 record['translation']
             ),
@@ -1185,7 +1376,17 @@ def solve_one(
             translation=translation,
             candidate_rerank=args.candidate_rerank,
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
             candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+            candidate_adaptive_type_failures=record.get(
+                '_candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=record.get(
+                '_candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=record.get(
+                '_candidate_adaptive_penalty_stage'
+            ),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_depth_eval_limit=args.candidate_depth_eval_limit,
             candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
@@ -1215,6 +1416,16 @@ def solve_one(
               prompt=record['prompt'],
               candidate_rerank_score=record.get('_candidate_rerank_score'),
               candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+              candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
+              candidate_adaptive_type_failures=record.get(
+                  '_candidate_adaptive_type_failures'
+              ),
+              candidate_adaptive_type_penalty=record.get(
+                  '_candidate_adaptive_type_penalty'
+              ),
+              candidate_adaptive_penalty_stage=record.get(
+                  '_candidate_adaptive_penalty_stage'
+              ),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
               candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -1266,7 +1477,17 @@ def solve_one(
               candidate_depth_rank=record.get('_candidate_depth_rank'),
               candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
               candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
               candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+              candidate_adaptive_type_failures=record.get(
+                  '_candidate_adaptive_type_failures'
+              ),
+              candidate_adaptive_type_penalty=record.get(
+                  '_candidate_adaptive_type_penalty'
+              ),
+              candidate_adaptive_penalty_stage=record.get(
+                  '_candidate_adaptive_penalty_stage'
+              ),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
           )
@@ -1319,7 +1540,17 @@ def solve_one(
                 args, progress_delta
             ),
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
             candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+            candidate_adaptive_type_failures=record.get(
+                '_candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=record.get(
+                '_candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=record.get(
+                '_candidate_adaptive_penalty_stage'
+            ),
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -1336,7 +1567,17 @@ def solve_one(
               translation=item['translation'],
               error=item['error'],
               candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_base_rerank_score=item.get('candidate_base_rerank_score'),
               candidate_rerank_phase=item.get('candidate_rerank_phase'),
+              candidate_adaptive_type_failures=item.get(
+                  'candidate_adaptive_type_failures'
+              ),
+              candidate_adaptive_type_penalty=item.get(
+                  'candidate_adaptive_type_penalty'
+              ),
+              candidate_adaptive_penalty_stage=item.get(
+                  'candidate_adaptive_penalty_stage'
+              ),
               candidate_source=item.get('candidate_source'),
               candidate_construction_type=item.get('candidate_construction_type'),
               candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1378,7 +1619,17 @@ def solve_one(
               candidate_depth_rank=item.get('candidate_depth_rank'),
               candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
               candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_base_rerank_score=item.get('candidate_base_rerank_score'),
               candidate_rerank_phase=item.get('candidate_rerank_phase'),
+              candidate_adaptive_type_failures=item.get(
+                  'candidate_adaptive_type_failures'
+              ),
+              candidate_adaptive_type_penalty=item.get(
+                  'candidate_adaptive_type_penalty'
+              ),
+              candidate_adaptive_penalty_stage=item.get(
+                  'candidate_adaptive_penalty_stage'
+              ),
               candidate_source=item.get('candidate_source') or 'lm',
               candidate_construction_type=item.get('candidate_construction_type'),
           )
@@ -1431,7 +1682,17 @@ def solve_one(
                 args, progress_delta
             ),
             candidate_rerank_score=item.get('candidate_rerank_score'),
+            candidate_base_rerank_score=item.get('candidate_base_rerank_score'),
             candidate_rerank_phase=item.get('candidate_rerank_phase'),
+            candidate_adaptive_type_failures=item.get(
+                'candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=item.get(
+                'candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=item.get(
+                'candidate_adaptive_penalty_stage'
+            ),
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1538,6 +1799,17 @@ def solve_one(
             args,
             source=source,
         )
+        note_adaptive_type_failure(
+            qs,
+            events_file,
+            adaptive_type_failures,
+            p.url,
+            depth,
+            raw,
+            translation,
+            args,
+            source=source,
+        )
         if translation.startswith('ERROR:'):
           continue
         canonical_key = qs.canonical_aux_key(translation)
@@ -1587,6 +1859,15 @@ def solve_one(
           secondary_value_model,
           args.candidate_frontfill_limit,
       )
+      ranked_candidates = apply_adaptive_type_penalties(
+          qs,
+          events_file,
+          ranked_candidates,
+          adaptive_type_failures,
+          args,
+          depth,
+          'node',
+      )
       if args.candidate_eval_limit and args.candidate_eval_limit > 0:
         for record in ranked_candidates[args.candidate_eval_limit:]:
           qs.event(
@@ -1598,7 +1879,17 @@ def solve_one(
               reason='rank_pruned',
               candidate_rerank=args.candidate_rerank,
               candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
               candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+              candidate_adaptive_type_failures=record.get(
+                  '_candidate_adaptive_type_failures'
+              ),
+              candidate_adaptive_type_penalty=record.get(
+                  '_candidate_adaptive_type_penalty'
+              ),
+              candidate_adaptive_penalty_stage=record.get(
+                  '_candidate_adaptive_penalty_stage'
+              ),
               candidate_construction_type=qs.construction_type_key(
                   record['translation']
               ),
@@ -1629,7 +1920,17 @@ def solve_one(
               soft_timeout_margin_sec=args.candidate_soft_timeout_margin_sec,
               prompt=prompt,
               candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
               candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+              candidate_adaptive_type_failures=record.get(
+                  '_candidate_adaptive_type_failures'
+              ),
+              candidate_adaptive_type_penalty=record.get(
+                  '_candidate_adaptive_type_penalty'
+              ),
+              candidate_adaptive_penalty_stage=record.get(
+                  '_candidate_adaptive_penalty_stage'
+              ),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
               candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -1681,7 +1982,17 @@ def solve_one(
               candidate_depth_rank=record.get('_candidate_depth_rank'),
               candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
               candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
               candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+              candidate_adaptive_type_failures=record.get(
+                  '_candidate_adaptive_type_failures'
+              ),
+              candidate_adaptive_type_penalty=record.get(
+                  '_candidate_adaptive_type_penalty'
+              ),
+              candidate_adaptive_penalty_stage=record.get(
+                  '_candidate_adaptive_penalty_stage'
+              ),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
           )
@@ -1734,7 +2045,17 @@ def solve_one(
                 args, progress_delta
             ),
             candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_base_rerank_score=record.get('_candidate_base_rerank_score'),
             candidate_rerank_phase=record.get('_candidate_rerank_phase'),
+            candidate_adaptive_type_failures=record.get(
+                '_candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=record.get(
+                '_candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=record.get(
+                '_candidate_adaptive_penalty_stage'
+            ),
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
             candidate_depth_rank=record.get('_candidate_depth_rank'),
@@ -1751,7 +2072,17 @@ def solve_one(
               translation=item['translation'],
               error=item['error'],
               candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_base_rerank_score=item.get('candidate_base_rerank_score'),
               candidate_rerank_phase=item.get('candidate_rerank_phase'),
+              candidate_adaptive_type_failures=item.get(
+                  'candidate_adaptive_type_failures'
+              ),
+              candidate_adaptive_type_penalty=item.get(
+                  'candidate_adaptive_type_penalty'
+              ),
+              candidate_adaptive_penalty_stage=item.get(
+                  'candidate_adaptive_penalty_stage'
+              ),
               candidate_source=item.get('candidate_source'),
               candidate_construction_type=item.get('candidate_construction_type'),
               candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1793,7 +2124,17 @@ def solve_one(
               candidate_depth_rank=item.get('candidate_depth_rank'),
               candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
               candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_base_rerank_score=item.get('candidate_base_rerank_score'),
               candidate_rerank_phase=item.get('candidate_rerank_phase'),
+              candidate_adaptive_type_failures=item.get(
+                  'candidate_adaptive_type_failures'
+              ),
+              candidate_adaptive_type_penalty=item.get(
+                  'candidate_adaptive_type_penalty'
+              ),
+              candidate_adaptive_penalty_stage=item.get(
+                  'candidate_adaptive_penalty_stage'
+              ),
               candidate_source=item.get('candidate_source') or 'lm',
               candidate_construction_type=item.get('candidate_construction_type'),
           )
@@ -1846,7 +2187,17 @@ def solve_one(
                 args, progress_delta
             ),
             candidate_rerank_score=item.get('candidate_rerank_score'),
+            candidate_base_rerank_score=item.get('candidate_base_rerank_score'),
             candidate_rerank_phase=item.get('candidate_rerank_phase'),
+            candidate_adaptive_type_failures=item.get(
+                'candidate_adaptive_type_failures'
+            ),
+            candidate_adaptive_type_penalty=item.get(
+                'candidate_adaptive_type_penalty'
+            ),
+            candidate_adaptive_penalty_stage=item.get(
+                'candidate_adaptive_penalty_stage'
+            ),
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
             candidate_depth_rank=item.get('candidate_depth_rank'),
@@ -1944,6 +2295,38 @@ def parse_args() -> argparse.Namespace:
           'tail slot selection strategy: even samples the ranked tail; '
           'near_spread keeps candidates just after the cutoff and spreads the rest'
       ),
+  )
+  parser.add_argument(
+      '--candidate_adaptive_type_penalty',
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help=(
+          'within a problem, down-rank construction types that repeatedly '
+          'trigger invalid-construction hard negatives'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_adaptive_type_penalty_threshold',
+      type=int,
+      default=32,
+      help='failure count before adaptive type penalty starts',
+  )
+  parser.add_argument(
+      '--candidate_adaptive_type_penalty_weight',
+      type=float,
+      default=0.35,
+      help='log-scaled penalty weight for repeated invalid construction types',
+  )
+  parser.add_argument(
+      '--candidate_adaptive_type_penalty_max',
+      type=float,
+      default=1.5,
+      help='maximum score penalty from repeated invalid construction types; <=0 disables cap',
+  )
+  parser.add_argument(
+      '--candidate_adaptive_type_penalty_reasons',
+      default='point_too_close,point_too_far,point_already_exists,unknown_point',
+      help='comma-separated invalid-construction reasons that feed adaptive type penalty',
   )
   parser.add_argument(
       '--candidate_timeout_beam_fallback_limit',

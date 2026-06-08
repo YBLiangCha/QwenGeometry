@@ -201,7 +201,7 @@ if [ ! -s "$VALUE_MODEL" ]; then
   echo "missing VALUE_MODEL: $VALUE_MODEL" | tee -a "$SCOUT_QUEUE_LOG" >&2
   exit 1
 fi
-if [ "$SCOUT_RERANK" = "value_model_frontfill_diverse" ] && [ ! -s "$SECONDARY_VALUE_MODEL" ]; then
+if [ -n "$SECONDARY_VALUE_MODEL" ] && [ ! -s "$SECONDARY_VALUE_MODEL" ]; then
   echo "missing SECONDARY_VALUE_MODEL: $SECONDARY_VALUE_MODEL" | tee -a "$SCOUT_QUEUE_LOG" >&2
   exit 1
 fi

@@ -1088,6 +1088,10 @@ changes. Tags are the practical version identifiers for this workspace.
   `value_model_frontfill_diverse` check would have skipped fallback and caused
   the postrun clean rerun to fail.  The wrapper now falls back to the existing
   `v16` secondary model whenever the configured secondary model is missing.
+- Scout wrapper secondary-model validation was also broadened from the old
+  exact rerank name to all non-empty `SECONDARY_VALUE_MODEL` settings, so
+  future frontfill/progress reranker variants fail early if the configured
+  secondary model is absent.
 
 ## Versioning Rule
 

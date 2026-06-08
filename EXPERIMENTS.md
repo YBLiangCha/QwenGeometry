@@ -1022,6 +1022,23 @@ changes. Tags are the practical version identifiers for this workspace.
   rank pruning is a plausible score bottleneck.  The next controlled comparison
   is v22tail after the current/default and existing adaptive queues finish.
 
+### `v22tail_attribution_diagnostics_v1`
+
+- Added attribution fields across downstream runner events:
+  `solved`, `candidate_ddar_error`, `candidate_beam_add`, and
+  `candidate_timeout_beam_fallback` now preserve
+  `candidate_depth_rank` and `candidate_depth_eval_phase` when available.
+- Extended `scripts/analyze_qwen_ag_events.py` with rank/phase counters for
+  depth-eval selected candidates, rank-pruned candidates, timeout candidates,
+  beam-add candidates, and timeout fallback candidates.
+- Rewrote `scripts/report_qwen_ag_analysis.py` as stable ASCII Markdown so
+  remote logs do not corrupt the diagnosis labels.  The report now shows
+  v22tail-specific coverage readouts: selected phases/rank bins, filtered
+  rank bins, timeout rank bins, fallback modes, and solved-case rank/phase.
+- Purpose: make the next v22tail run auditable.  If a new solve comes from a
+  low-rank tail slot or a timeout fallback branch, the report should make that
+  visible immediately instead of requiring manual event-log reconstruction.
+
 ## Versioning Rule
 
 - Do not overwrite completed output directories.

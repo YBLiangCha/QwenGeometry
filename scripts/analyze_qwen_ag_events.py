@@ -161,6 +161,34 @@ def num_summary(values: list[float]) -> dict[str, Any]:
   }
 
 
+def int_or_none(value: Any) -> int | None:
+  if isinstance(value, bool):
+    return None
+  if isinstance(value, int):
+    return value
+  if isinstance(value, str):
+    try:
+      return int(value)
+    except ValueError:
+      return None
+  return None
+
+
+def rank_bin(value: Any) -> str:
+  rank = int_or_none(value)
+  if rank is None or rank < 0:
+    return 'unknown'
+  if rank < 48:
+    return '000-047'
+  if rank < 96:
+    return '048-095'
+  if rank < 192:
+    return '096-191'
+  if rank < 384:
+    return '192-383'
+  return '384+'
+
+
 def load_summary(summary_jsonl: Path | None) -> dict[str, dict[str, Any]]:
   if not summary_jsonl:
     return {}
@@ -249,6 +277,28 @@ def analyze_problem(
   candidate_hard_negative_signals = Counter()
   candidate_hard_negative_signal_types = Counter()
   candidate_hard_negative_signal_sources = Counter()
+  depth_eval_selected_phases = Counter()
+  depth_eval_selected_rank_bins = Counter()
+  depth_eval_selected_ranks: list[float] = []
+  depth_eval_selected_types = Counter()
+  depth_eval_selected_sources = Counter()
+  filtered_eval_phases = Counter()
+  filtered_rank_bins = Counter()
+  candidate_error_eval_phases = Counter()
+  candidate_error_rank_bins = Counter()
+  timeout_eval_phases = Counter()
+  timeout_rank_bins = Counter()
+  timeout_requested_values: list[float] = []
+  timeout_effective_values: list[float] = []
+  timeout_wall_values: list[float] = []
+  candidate_timeout_config: dict[str, Any] = {}
+  timeout_fallback_modes = Counter()
+  timeout_fallback_phases = Counter()
+  timeout_fallback_rank_bins = Counter()
+  timeout_fallback_types = Counter()
+  candidate_beam_add_phases = Counter()
+  candidate_beam_add_rank_bins = Counter()
+  solved_event: dict[str, Any] = {}
   root_ddar: dict[str, Any] = {}
   lookup: dict[tuple[int, str], dict[str, str]] = {}
 
@@ -283,14 +333,42 @@ def analyze_problem(
       filtered_construction_types[ctype] += 1
       filtered_sources[record['source']] += 1
       filtered_types_by_reason.setdefault(reason, Counter())[ctype] += 1
+      filtered_eval_phases[event.get('candidate_depth_eval_phase') or 'pruned'] += 1
+      filtered_rank_bins[rank_bin(event.get('candidate_depth_rank'))] += 1
+    elif kind == 'candidate_depth_eval_selected':
+      record = candidate_record(event, lookup)
+      depth_eval_selected_phases[
+          event.get('candidate_depth_eval_phase') or 'unknown'
+      ] += 1
+      depth_eval_selected_rank_bins[
+          rank_bin(event.get('candidate_depth_rank'))
+      ] += 1
+      rank = int_or_none(event.get('candidate_depth_rank'))
+      if rank is not None:
+        depth_eval_selected_ranks.append(float(rank))
+      depth_eval_selected_types[record['construction_type']] += 1
+      depth_eval_selected_sources[record['source']] += 1
     elif kind == 'candidate_ddar_error':
       candidate_ddar_errors[event.get('error') or 'unknown'] += 1
       record = candidate_record(event, lookup)
       ctype = record['construction_type']
       candidate_error_construction_types[ctype] += 1
+      phase = event.get('candidate_depth_eval_phase') or 'unknown'
+      candidate_error_eval_phases[phase] += 1
+      candidate_error_rank_bins[rank_bin(event.get('candidate_depth_rank'))] += 1
       error_type = classify_error(event.get('error') or '')
       if error_type == 'timeout':
         timeout_construction_types[ctype] += 1
+        timeout_eval_phases[phase] += 1
+        timeout_rank_bins[rank_bin(event.get('candidate_depth_rank'))] += 1
+        for field, target in (
+            ('requested_timeout', timeout_requested_values),
+            ('effective_timeout', timeout_effective_values),
+            ('wall_timeout', timeout_wall_values),
+        ):
+          value = event.get(field)
+          if isinstance(value, (int, float)):
+            target.append(float(value))
     elif kind == 'ddar_done':
       tag = event.get('tag') or ''
       if tag == 'root':
@@ -340,6 +418,48 @@ def analyze_problem(
       record = candidate_record(event, lookup)
       candidate_hard_negative_signal_types[record['construction_type']] += 1
       candidate_hard_negative_signal_sources[record['source']] += 1
+    elif kind == 'candidate_timeout_config':
+      candidate_timeout_config = {
+          key: event.get(key)
+          for key in (
+              'requested_timeout',
+              'effective_timeout',
+              'wall_timeout',
+              'soft_timeout_margin_sec',
+          )
+          if key in event
+      }
+    elif kind == 'candidate_timeout_beam_fallback':
+      record = candidate_record(event, lookup)
+      timeout_fallback_modes[event.get('fallback_mode') or 'unknown'] += 1
+      timeout_fallback_phases[
+          event.get('candidate_depth_eval_phase') or 'unknown'
+      ] += 1
+      timeout_fallback_rank_bins[
+          rank_bin(event.get('candidate_depth_rank'))
+      ] += 1
+      timeout_fallback_types[record['construction_type']] += 1
+    elif kind == 'candidate_beam_add':
+      candidate_beam_add_phases[
+          event.get('candidate_depth_eval_phase') or 'unknown'
+      ] += 1
+      candidate_beam_add_rank_bins[
+          rank_bin(event.get('candidate_depth_rank'))
+      ] += 1
+    elif kind == 'solved':
+      solved_event = {
+          key: event.get(key)
+          for key in (
+              'depth',
+              'aux',
+              'candidate_depth_rank',
+              'candidate_depth_eval_phase',
+              'candidate_rerank_score',
+              'candidate_source',
+              'candidate_construction_type',
+          )
+          if key in event
+      }
 
   candidates = kind_counts.get('candidate', 0)
   invalid = sum(invalid_reasons.values())
@@ -417,6 +537,36 @@ def analyze_problem(
       'candidate_hard_negative_signal_sources': dict(
           candidate_hard_negative_signal_sources
       ),
+      'candidate_timeout_config': candidate_timeout_config,
+      'depth_eval_selected': sum(depth_eval_selected_phases.values()),
+      'depth_eval_selected_phases': dict(depth_eval_selected_phases),
+      'depth_eval_selected_rank_bins': dict(depth_eval_selected_rank_bins),
+      'depth_eval_selected_rank_summary': num_summary(depth_eval_selected_ranks),
+      'depth_eval_selected_construction_types_top': top_counts(
+          depth_eval_selected_types
+      ),
+      'depth_eval_selected_sources': dict(depth_eval_selected_sources),
+      'filtered_eval_phases': dict(filtered_eval_phases),
+      'filtered_rank_bins': dict(filtered_rank_bins),
+      'candidate_error_eval_phases': dict(candidate_error_eval_phases),
+      'candidate_error_rank_bins': dict(candidate_error_rank_bins),
+      'timeout_eval_phases': dict(timeout_eval_phases),
+      'timeout_rank_bins': dict(timeout_rank_bins),
+      'timeout_requested_sec': num_summary(timeout_requested_values),
+      'timeout_effective_sec': num_summary(timeout_effective_values),
+      'timeout_wall_sec': num_summary(timeout_wall_values),
+      'candidate_timeout_beam_fallbacks': sum(timeout_fallback_modes.values()),
+      'candidate_timeout_beam_fallback_modes': dict(timeout_fallback_modes),
+      'candidate_timeout_beam_fallback_phases': dict(timeout_fallback_phases),
+      'candidate_timeout_beam_fallback_rank_bins': dict(
+          timeout_fallback_rank_bins
+      ),
+      'candidate_timeout_beam_fallback_types_top': top_counts(
+          timeout_fallback_types
+      ),
+      'candidate_beam_add_phases': dict(candidate_beam_add_phases),
+      'candidate_beam_add_rank_bins': dict(candidate_beam_add_rank_bins),
+      'solved_event': solved_event,
   }
   result['diagnosis'] = diagnose(result)
   return result
@@ -517,6 +667,45 @@ def main() -> None:
   aggregate_candidate_hard_negative_signal_sources = merge_problem_counter(
       problems, 'candidate_hard_negative_signal_sources'
   )
+  aggregate_depth_eval_selected_phases = merge_problem_counter(
+      problems, 'depth_eval_selected_phases'
+  )
+  aggregate_depth_eval_selected_rank_bins = merge_problem_counter(
+      problems, 'depth_eval_selected_rank_bins'
+  )
+  aggregate_depth_eval_selected_types = merge_problem_counter(
+      problems, 'depth_eval_selected_construction_types_top'
+  )
+  aggregate_filtered_eval_phases = merge_problem_counter(
+      problems, 'filtered_eval_phases'
+  )
+  aggregate_filtered_rank_bins = merge_problem_counter(
+      problems, 'filtered_rank_bins'
+  )
+  aggregate_timeout_eval_phases = merge_problem_counter(
+      problems, 'timeout_eval_phases'
+  )
+  aggregate_timeout_rank_bins = merge_problem_counter(
+      problems, 'timeout_rank_bins'
+  )
+  aggregate_timeout_fallback_modes = merge_problem_counter(
+      problems, 'candidate_timeout_beam_fallback_modes'
+  )
+  aggregate_timeout_fallback_phases = merge_problem_counter(
+      problems, 'candidate_timeout_beam_fallback_phases'
+  )
+  aggregate_timeout_fallback_rank_bins = merge_problem_counter(
+      problems, 'candidate_timeout_beam_fallback_rank_bins'
+  )
+  aggregate_timeout_fallback_types = merge_problem_counter(
+      problems, 'candidate_timeout_beam_fallback_types_top'
+  )
+  aggregate_candidate_beam_add_phases = merge_problem_counter(
+      problems, 'candidate_beam_add_phases'
+  )
+  aggregate_candidate_beam_add_rank_bins = merge_problem_counter(
+      problems, 'candidate_beam_add_rank_bins'
+  )
   aggregate_solved_aux_types = Counter(
       p.get('solved_aux_construction_type')
       for p in problems
@@ -594,6 +783,39 @@ def main() -> None:
           ),
           'solved_aux_construction_types_top': top_counts(
               aggregate_solved_aux_types
+          ),
+          'depth_eval_selected': sum(
+              p.get('depth_eval_selected', 0) for p in problems
+          ),
+          'depth_eval_selected_phases': dict(aggregate_depth_eval_selected_phases),
+          'depth_eval_selected_rank_bins': dict(
+              aggregate_depth_eval_selected_rank_bins
+          ),
+          'depth_eval_selected_construction_types_top': top_counts(
+              aggregate_depth_eval_selected_types
+          ),
+          'filtered_eval_phases': dict(aggregate_filtered_eval_phases),
+          'filtered_rank_bins': dict(aggregate_filtered_rank_bins),
+          'timeout_eval_phases': dict(aggregate_timeout_eval_phases),
+          'timeout_rank_bins': dict(aggregate_timeout_rank_bins),
+          'candidate_timeout_beam_fallbacks': sum(
+              p.get('candidate_timeout_beam_fallbacks', 0) for p in problems
+          ),
+          'candidate_timeout_beam_fallback_modes': dict(
+              aggregate_timeout_fallback_modes
+          ),
+          'candidate_timeout_beam_fallback_phases': dict(
+              aggregate_timeout_fallback_phases
+          ),
+          'candidate_timeout_beam_fallback_rank_bins': dict(
+              aggregate_timeout_fallback_rank_bins
+          ),
+          'candidate_timeout_beam_fallback_types_top': top_counts(
+              aggregate_timeout_fallback_types
+          ),
+          'candidate_beam_add_phases': dict(aggregate_candidate_beam_add_phases),
+          'candidate_beam_add_rank_bins': dict(
+              aggregate_candidate_beam_add_rank_bins
           ),
           'candidate_backfill_exhausted': sum(
               p['event_counts'].get('candidate_backfill_exhausted', 0)

@@ -187,6 +187,8 @@ def make_candidate_task(
     candidate_rerank_score: float | None = None,
     candidate_source: str | None = None,
     candidate_construction_type: str | None = None,
+    candidate_depth_rank: int | None = None,
+    candidate_depth_eval_phase: str | None = None,
     parent_fact_context: list[str] | None = None,
 ) -> dict[str, Any]:
   raw_text = raw.strip()
@@ -214,6 +216,8 @@ def make_candidate_task(
       'candidate_rerank_score': candidate_rerank_score,
       'candidate_source': candidate_source,
       'candidate_construction_type': candidate_construction_type,
+      'candidate_depth_rank': candidate_depth_rank,
+      'candidate_depth_eval_phase': candidate_depth_eval_phase,
       'parent_fact_context': list(parent_fact_context or []),
       'tag': f'depth{depth}:{raw}',
   }
@@ -784,6 +788,8 @@ def maybe_add_timeout_beam_fallback(
         candidate_rerank_score=item.get('candidate_rerank_score'),
         candidate_source=item.get('candidate_source'),
         candidate_construction_type=item.get('candidate_construction_type'),
+        candidate_depth_rank=item.get('candidate_depth_rank'),
+        candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
         fallback_rank=fallback_rank,
         fallback_limit=limit,
         fallback_mode=mode,
@@ -1171,6 +1177,8 @@ def solve_one(
               candidate_rerank_score=record.get('_candidate_rerank_score'),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
+              candidate_depth_rank=record.get('_candidate_depth_rank'),
+              candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
               parent_fact_context=record.get('parent_fact_context'),
           ))
           parallel_tasks[-1]['prev_score'] = record['prev_score']
@@ -1209,7 +1217,17 @@ def solve_one(
             candidate_rerank_score=record.get('_candidate_rerank_score'),
         )
         if result['solved']:
-          qs.event(events_file, kind='solved', depth=depth, aux=translation)
+          qs.event(
+              events_file,
+              kind='solved',
+              depth=depth,
+              aux=translation,
+              candidate_depth_rank=record.get('_candidate_depth_rank'),
+              candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
+              candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_source=record.get('source', 'lm'),
+              candidate_construction_type=qs.construction_type_key(translation),
+          )
           row.update({
               'solved': True,
               'solved_depth': depth,
@@ -1261,6 +1279,8 @@ def solve_one(
             candidate_rerank_score=record.get('_candidate_rerank_score'),
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
+            candidate_depth_rank=record.get('_candidate_depth_rank'),
+            candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
         )
       timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
@@ -1275,6 +1295,8 @@ def solve_one(
               candidate_rerank_score=item.get('candidate_rerank_score'),
               candidate_source=item.get('candidate_source'),
               candidate_construction_type=item.get('candidate_construction_type'),
+              candidate_depth_rank=item.get('candidate_depth_rank'),
+              candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
               traceback=item.get('traceback'),
               elapsed_sec=item.get('elapsed_sec'),
               requested_timeout=item.get('requested_timeout'),
@@ -1308,6 +1330,11 @@ def solve_one(
               kind='solved',
               depth=depth,
               aux=item['translation'],
+              candidate_depth_rank=item.get('candidate_depth_rank'),
+              candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
+              candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_source=item.get('candidate_source') or 'lm',
+              candidate_construction_type=item.get('candidate_construction_type'),
           )
           row.update({
               'solved': True,
@@ -1360,6 +1387,8 @@ def solve_one(
             candidate_rerank_score=item.get('candidate_rerank_score'),
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
+            candidate_depth_rank=item.get('candidate_depth_rank'),
+            candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
         )
       maybe_add_timeout_beam_fallback(
           qs,
@@ -1552,6 +1581,8 @@ def solve_one(
               candidate_rerank_score=record.get('_candidate_rerank_score'),
               candidate_source=record.get('source', 'lm'),
               candidate_construction_type=qs.construction_type_key(translation),
+              candidate_depth_rank=record.get('_candidate_depth_rank'),
+              candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
               parent_fact_context=parent_fact_context,
           ))
           parallel_tasks[-1]['prev_score'] = prev_score
@@ -1590,7 +1621,17 @@ def solve_one(
             candidate_rerank_score=record.get('_candidate_rerank_score'),
         )
         if result['solved']:
-          qs.event(events_file, kind='solved', depth=depth, aux=translation)
+          qs.event(
+              events_file,
+              kind='solved',
+              depth=depth,
+              aux=translation,
+              candidate_depth_rank=record.get('_candidate_depth_rank'),
+              candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
+              candidate_rerank_score=record.get('_candidate_rerank_score'),
+              candidate_source=record.get('source', 'lm'),
+              candidate_construction_type=qs.construction_type_key(translation),
+          )
           row.update({
               'solved': True,
               'solved_depth': depth,
@@ -1642,6 +1683,8 @@ def solve_one(
             candidate_rerank_score=record.get('_candidate_rerank_score'),
             candidate_source=record.get('source', 'lm'),
             candidate_construction_type=qs.construction_type_key(translation),
+            candidate_depth_rank=record.get('_candidate_depth_rank'),
+            candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
         )
       timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
@@ -1656,6 +1699,8 @@ def solve_one(
               candidate_rerank_score=item.get('candidate_rerank_score'),
               candidate_source=item.get('candidate_source'),
               candidate_construction_type=item.get('candidate_construction_type'),
+              candidate_depth_rank=item.get('candidate_depth_rank'),
+              candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
               traceback=item.get('traceback'),
               elapsed_sec=item.get('elapsed_sec'),
               requested_timeout=item.get('requested_timeout'),
@@ -1689,6 +1734,11 @@ def solve_one(
               kind='solved',
               depth=depth,
               aux=item['translation'],
+              candidate_depth_rank=item.get('candidate_depth_rank'),
+              candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
+              candidate_rerank_score=item.get('candidate_rerank_score'),
+              candidate_source=item.get('candidate_source') or 'lm',
+              candidate_construction_type=item.get('candidate_construction_type'),
           )
           row.update({
               'solved': True,
@@ -1741,6 +1791,8 @@ def solve_one(
             candidate_rerank_score=item.get('candidate_rerank_score'),
             candidate_source=item.get('candidate_source') or 'lm',
             candidate_construction_type=item.get('candidate_construction_type'),
+            candidate_depth_rank=item.get('candidate_depth_rank'),
+            candidate_depth_eval_phase=item.get('candidate_depth_eval_phase'),
         )
       maybe_add_timeout_beam_fallback(
           qs,

@@ -10,16 +10,18 @@ from typing import Any
 
 
 DIAGNOSIS_TEXT = {
-    'solved': '已解决',
-    'no_candidates_generated': '没有生成候选',
-    'high_invalid_rate': '无效候选比例高',
-    'duplicate_collapse': 'canonical 重复坍缩',
-    'candidate_ddar_timeout_blocked': '候选 DDAR 超时阻塞',
-    'candidate_ddar_timeouts': '存在候选 DDAR 超时',
-    'symbolic_progress_but_wrong_direction': 'DDAR 有事实增长但方向不对',
-    'valid_candidates_not_evaluated': '有合法候选但未完成评估',
-    'template_backfill_exhausted': '模板回填仍补不满',
-    'search_exhausted_no_goal': '搜索耗尽但未达目标',
+    'solved': 'solved',
+    'no_candidates_generated': 'no candidates generated',
+    'high_invalid_rate': 'high invalid candidate rate',
+    'duplicate_collapse': 'canonical duplicate collapse',
+    'candidate_ddar_timeout_blocked': 'candidate DDAR timeout blocked',
+    'candidate_ddar_timeouts': 'candidate DDAR timeouts',
+    'symbolic_progress_but_wrong_direction': (
+        'DDAR makes facts but misses the goal'
+    ),
+    'valid_candidates_not_evaluated': 'valid candidates not evaluated',
+    'template_backfill_exhausted': 'template backfill exhausted',
+    'search_exhausted_no_goal': 'search exhausted without goal',
 }
 
 
@@ -38,25 +40,63 @@ def fmt_rate(num: int, den: int) -> str:
   return f'{num / den:.1%}' if den else '0.0%'
 
 
+def fmt_num_summary(values: dict[str, Any] | None) -> str:
+  if not values or not values.get('count'):
+    return '-'
+  parts = [f"n={values.get('count')}"]
+  for key in ('median', 'mean', 'max'):
+    if key in values:
+      parts.append(f"{key}={values.get(key)}")
+  return ', '.join(parts)
+
+
 def diagnosis_text(labels: list[str]) -> str:
   return ', '.join(DIAGNOSIS_TEXT.get(label, label) for label in labels) or '-'
+
+
+def phase_count(problem: dict[str, Any], phase: str) -> int:
+  return int((problem.get('depth_eval_selected_phases') or {}).get(phase, 0) or 0)
 
 
 def problem_line(problem: dict[str, Any]) -> str:
   filtered = problem.get('filtered_reasons') or {}
   candidate_errors = problem.get('candidate_ddar_error_types') or {}
   max_added = problem.get('max_added_candidate') or {}
+  timeout_errors = sum(
+      count
+      for key, count in candidate_errors.items()
+      if 'timeout' in str(key).lower()
+  )
   return (
       f"| {problem.get('problem')} "
       f"| {'Y' if problem.get('solved') else 'N'} "
       f"| {problem.get('candidates', 0)} "
-      f"| {problem.get('invalid_candidates', 0)} "
-      f"| {filtered.get('duplicate_canonical', 0)} "
+      f"| {problem.get('valid_candidates', 0)} "
+      f"| {problem.get('depth_eval_selected', 0)} "
+      f"| {phase_count(problem, 'tail_rank_coverage')} "
+      f"| {filtered.get('depth_rank_pruned', 0)} "
       f"| {problem.get('candidate_ddar_done', 0)} "
-      f"| {fmt_count_map(candidate_errors, 3)} "
+      f"| {timeout_errors} "
+      f"| {problem.get('candidate_timeout_beam_fallbacks', 0)} "
       f"| {max_added.get('added_dependencies', 0) or 0}"
       f"/{max_added.get('construction_type') or '-'} "
       f"| {diagnosis_text(problem.get('diagnosis') or [])} |"
+  )
+
+
+def solved_detail(problem: dict[str, Any]) -> str:
+  event = problem.get('solved_event') or {}
+  phase = event.get('candidate_depth_eval_phase') or '-'
+  rank = event.get('candidate_depth_rank')
+  rank_text = '-' if rank is None else str(rank)
+  aux_type = (
+      event.get('candidate_construction_type')
+      or problem.get('solved_aux_construction_type')
+      or '-'
+  )
+  return (
+      f"depth={problem.get('solved_depth')} rank={rank_text} "
+      f"phase={phase} type={aux_type} aux=`{problem.get('aux')}`"
   )
 
 
@@ -74,6 +114,7 @@ def render_report(payload: dict[str, Any]) -> str:
   invalid = int(aggregate.get('invalid_candidates') or 0)
   filtered = int(aggregate.get('filtered_total') or 0)
   duplicate = int(aggregate.get('duplicate_canonical') or 0)
+
   lines = [
       '# Qwen+AG Failure Analysis',
       '',
@@ -86,15 +127,13 @@ def render_report(payload: dict[str, Any]) -> str:
     ])
     for problem in new_solved:
       lines.append(
-          f"- NEW SOLVED: `{problem.get('problem')}` "
-          f"depth={problem.get('solved_depth')} "
-          f"aux=`{problem.get('aux')}` "
-          f"type={problem.get('solved_aux_construction_type') or '-'}"
+          f"- NEW SOLVED: `{problem.get('problem')}` {solved_detail(problem)}"
       )
     lines.extend([
         f"- Baseline summary: `{payload.get('baseline_summary_jsonl')}`",
         '',
     ])
+
   lines.extend([
       '## Summary',
       '',
@@ -118,8 +157,36 @@ def render_report(payload: dict[str, Any]) -> str:
       f"- Candidate hard-negative signals: "
       f"{aggregate.get('candidate_hard_negative_signals', 0)} "
       f"({fmt_count_map(aggregate.get('candidate_hard_negative_signal_reasons'))})",
-  ])
-  lines.extend([
+      '',
+      '## Evaluation Coverage',
+      '',
+      f"- Depth-eval selected: {aggregate.get('depth_eval_selected', 0)}",
+      f"- Selected phases: "
+      f"{fmt_count_map(aggregate.get('depth_eval_selected_phases'))}",
+      f"- Selected rank bins: "
+      f"{fmt_count_map(aggregate.get('depth_eval_selected_rank_bins'))}",
+      f"- Selected construction top: "
+      f"{fmt_count_map(aggregate.get('depth_eval_selected_construction_types_top'))}",
+      f"- Filtered phases: {fmt_count_map(aggregate.get('filtered_eval_phases'))}",
+      f"- Filtered rank bins: {fmt_count_map(aggregate.get('filtered_rank_bins'))}",
+      f"- Beam-add phases: {fmt_count_map(aggregate.get('candidate_beam_add_phases'))}",
+      f"- Beam-add rank bins: "
+      f"{fmt_count_map(aggregate.get('candidate_beam_add_rank_bins'))}",
+      '',
+      '## Timeout Readout',
+      '',
+      f"- Timeout phases: {fmt_count_map(aggregate.get('timeout_eval_phases'))}",
+      f"- Timeout rank bins: {fmt_count_map(aggregate.get('timeout_rank_bins'))}",
+      f"- Timeout fallback count: "
+      f"{aggregate.get('candidate_timeout_beam_fallbacks', 0)}",
+      f"- Timeout fallback modes: "
+      f"{fmt_count_map(aggregate.get('candidate_timeout_beam_fallback_modes'))}",
+      f"- Timeout fallback phases: "
+      f"{fmt_count_map(aggregate.get('candidate_timeout_beam_fallback_phases'))}",
+      f"- Timeout fallback rank bins: "
+      f"{fmt_count_map(aggregate.get('candidate_timeout_beam_fallback_rank_bins'))}",
+      f"- Timeout fallback types: "
+      f"{fmt_count_map(aggregate.get('candidate_timeout_beam_fallback_types_top'))}",
       '',
       '## Aggregate Diagnosis',
       '',
@@ -128,43 +195,43 @@ def render_report(payload: dict[str, Any]) -> str:
       '## Construction-Type Signals',
       '',
       f"- Generated valid top: {fmt_count_map(aggregate.get('construction_types_top'))}",
-      f"- Evaluated top: {fmt_count_map(aggregate.get('evaluated_construction_types_top'))}",
-      f"- Filtered top: {fmt_count_map(aggregate.get('filtered_construction_types_top'))}",
+      f"- Evaluated top: "
+      f"{fmt_count_map(aggregate.get('evaluated_construction_types_top'))}",
+      f"- Filtered top: "
+      f"{fmt_count_map(aggregate.get('filtered_construction_types_top'))}",
       f"- Timeout top: {fmt_count_map(aggregate.get('timeout_construction_types_top'))}",
       f"- Hard-negative top: "
       f"{fmt_count_map(aggregate.get('candidate_hard_negative_signal_types_top'))}",
-      f"- Solved aux top: {fmt_count_map(aggregate.get('solved_aux_construction_types_top'))}",
+      f"- Solved aux top: "
+      f"{fmt_count_map(aggregate.get('solved_aux_construction_types_top'))}",
       '',
       '## Optimization Readout',
       '',
       (
-          '- Candidate quality remains the first lever: duplicate_canonical and '
-          'invalid_candidates dominate the loss before DDAR even has a useful branch.'
+          '- If tail_rank_coverage appears in selected phases but never in '
+          'beam-add/solved phases, tail candidates are being sampled but DDAR '
+          'or reranking is not extracting useful branches.'
       ),
       (
-          '- Search diversity is partly working if evaluated construction types are '
-          'more balanced than generated types; remaining depth_rank_pruned and timeout '
-          'types show where value-model reranking should improve.'
+          '- If selected rank bins are concentrated in 000-047 while filtered '
+          'rank bins contain most candidates, increase tail slots or loosen the '
+          'depth eval limit only on problems with low timeout pressure.'
       ),
       (
-          '- Auxiliary SFT data should prioritize solved candidates and fast '
-          'DDAR-progress positives; slow timeout candidates and PointTooClose/TooFar '
-          'should remain hard negatives.'
+          '- If timeout rank bins are mostly tail or fallback candidates, reduce '
+          'timeout fallback or require a stronger value-model prior before '
+          'keeping timed-out branches alive.'
       ),
       (
-          '- Generator-side hard-negative signals are useful only when they keep '
-          'the original LM prompt and raw target; value-model-only negatives do not '
-          'teach the decoder to avoid invalid point constructions.'
-      ),
-      (
-          '- Fact-context ablations should be judged by whether duplicate collapse, '
-          'wrong-direction DDAR progress, and timeout-heavy evaluated types decrease.'
+          '- Candidate SFT data should continue to emphasize solved candidates '
+          'and fast DDAR-progress positives; slow timeout branches should remain '
+          'hard negatives unless fallback later solves a problem.'
       ),
       '',
       '## Per-Problem Table',
       '',
-      '| Problem | Solved | Cand | Invalid | Dup | DDAR | DDAR Errors | Max Added/Type | Diagnosis |',
-      '|---|---:|---:|---:|---:|---:|---|---|---|',
+      '| Problem | Solved | Cand | Valid | Selected | TailSel | RankPruned | DDAR | Timeout | Fallback | Max Added/Type | Diagnosis |',
+      '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|',
   ])
   lines.extend(problem_line(problem) for problem in problems)
   lines.extend([
@@ -177,20 +244,18 @@ def render_report(payload: dict[str, Any]) -> str:
       lines.append(
           f"- `{problem.get('problem')}`: "
           f"{diagnosis_text(problem.get('diagnosis') or [])}; "
-          f"generated={fmt_count_map(problem.get('construction_types_top'), 5)}; "
-          f"evaluated={fmt_count_map(problem.get('evaluated_construction_types_top'), 5)}; "
-          f"timeout={fmt_count_map(problem.get('timeout_construction_types_top'), 5)}"
+          f"selected={fmt_count_map(problem.get('depth_eval_selected_phases'), 5)}; "
+          f"selected_ranks={fmt_count_map(problem.get('depth_eval_selected_rank_bins'), 5)}; "
+          f"filtered_ranks={fmt_count_map(problem.get('filtered_rank_bins'), 5)}; "
+          f"timeout={fmt_count_map(problem.get('timeout_construction_types_top'), 5)}; "
+          f"fallback={problem.get('candidate_timeout_beam_fallbacks', 0)}"
       )
   else:
     lines.append('- No unsolved completed problems in this analysis payload.')
   if solved:
     lines.extend(['', '## Solved Cases', ''])
     for problem in solved:
-      lines.append(
-          f"- `{problem.get('problem')}` depth={problem.get('solved_depth')} "
-          f"aux=`{problem.get('aux')}` "
-          f"type={problem.get('solved_aux_construction_type') or '-'}"
-      )
+      lines.append(f"- `{problem.get('problem')}` {solved_detail(problem)}")
   return '\n'.join(lines) + '\n'
 
 

@@ -1314,7 +1314,10 @@ def solve_one(
         dynamic_progress_type_bonuses,
     )
 
-  def preferred_template_construction_types(limit: int = 12) -> list[str]:
+  def preferred_construction_types(limit: int) -> list[str]:
+    limit = max(0, int(limit or 0))
+    if limit <= 0:
+      return []
     scored = []
     for typ, score in type_bonus_context().items():
       try:
@@ -1322,6 +1325,12 @@ def solve_one(
       except (TypeError, ValueError):
         continue
     return [typ for _, typ in sorted(scored, reverse=True)[:limit]]
+
+  def prompt_preferred_construction_types() -> list[str]:
+    return preferred_construction_types(args.candidate_prompt_preferred_type_limit)
+
+  def template_preferred_construction_types() -> list[str]:
+    return preferred_construction_types(args.candidate_template_preferred_type_limit)
 
   for depth in range(args.search_depth):
     qs.event(events_file, kind='depth_start', depth=depth, nodes=len(beam))
@@ -1351,13 +1360,24 @@ def solve_one(
             )
             else None
         )
-        preferred_types = preferred_template_construction_types()
+        preferred_types = prompt_preferred_construction_types()
+        preferred_template_types = template_preferred_construction_types()
         if preferred_types and args.candidate_prompt_sampling != 'none':
           qs.event(
               events_file,
               kind='candidate_prompt_prefix_bias',
               depth=depth,
               preferred_construction_types=preferred_types,
+          )
+        if preferred_template_types and args.candidate_template_backfill:
+          qs.event(
+              events_file,
+              kind='candidate_template_backfill_type_bias',
+              depth=depth,
+              preferred_construction_types=preferred_template_types,
+              candidate_template_preferred_type_limit=(
+                  args.candidate_template_preferred_type_limit
+              ),
           )
         candidates = generator.generate(
             prompt,
@@ -1387,7 +1407,7 @@ def solve_one(
               needed * 4,
               seen_generation_keys if args.candidate_canonical_dedup else None,
               qs.goal_point_names(p_cur),
-              preferred_template_construction_types(),
+              preferred_template_types,
           ):
             generation_key = qs.candidate_generation_dedup_key(raw)
             if raw not in seen_raw and generation_key not in seen_generation_keys:
@@ -1473,7 +1493,7 @@ def solve_one(
               pr,
               pt,
               qs.goal_point_names(p_cur),
-              preferred_template_construction_types(),
+              preferred_template_types,
           )
         ranked_node_candidates = qs.rerank_candidate_records(
             translated_candidates,
@@ -2021,13 +2041,24 @@ def solve_one(
           )
           else None
       )
-      preferred_types = preferred_template_construction_types()
+      preferred_types = prompt_preferred_construction_types()
+      preferred_template_types = template_preferred_construction_types()
       if preferred_types and args.candidate_prompt_sampling != 'none':
         qs.event(
             events_file,
             kind='candidate_prompt_prefix_bias',
             depth=depth,
             preferred_construction_types=preferred_types,
+        )
+      if preferred_template_types and args.candidate_template_backfill:
+        qs.event(
+            events_file,
+            kind='candidate_template_backfill_type_bias',
+            depth=depth,
+            preferred_construction_types=preferred_template_types,
+            candidate_template_preferred_type_limit=(
+                args.candidate_template_preferred_type_limit
+            ),
         )
       candidates = generator.generate(
           prompt,
@@ -2057,7 +2088,7 @@ def solve_one(
             needed * 4,
             seen_generation_keys if args.candidate_canonical_dedup else None,
             qs.goal_point_names(p_cur),
-            preferred_template_construction_types(),
+            preferred_template_types,
         ):
           generation_key = qs.candidate_generation_dedup_key(raw)
           if raw not in seen_raw and generation_key not in seen_generation_keys:
@@ -2144,7 +2175,7 @@ def solve_one(
             pr,
             pt,
             qs.goal_point_names(p_cur),
-            preferred_template_construction_types(),
+            preferred_template_types,
         )
       ranked_candidates = qs.rerank_candidate_records(
           translated_candidates,
@@ -2715,6 +2746,24 @@ def parse_args() -> argparse.Namespace:
           'after valid LM candidates are translated, still append this many '
           'template-backfill candidates before reranking; 0 keeps the old '
           'only-backfill-when-short behavior'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_prompt_preferred_type_limit',
+      type=int,
+      default=12,
+      help=(
+          'number of mined construction-type bonuses used to bias LM prompt '
+          'prefix sampling; keep this modest so LM sampling stays focused'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_template_preferred_type_limit',
+      type=int,
+      default=36,
+      help=(
+          'number of mined construction-type bonuses used to order template '
+          'backfill buckets before reranking'
       ),
   )
   parser.add_argument(

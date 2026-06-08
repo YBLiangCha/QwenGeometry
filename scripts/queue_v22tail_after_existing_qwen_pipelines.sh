@@ -8,7 +8,7 @@ cd "$WORK"
 
 SCRIPT_DIR=${SCRIPT_DIR:-scripts}
 PIPELINE_DIR=${PIPELINE_DIR:-data/synth_cpt_1m_pruned_v2}
-POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v24simpair_v1}
+POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v25adapt_v1}
 QUEUE_LOG=${QUEUE_LOG:-outputs/${POSTRUN_TAG}.queue_after_existing.log}
 WAIT_INTERVAL=${WAIT_INTERVAL:-60}
 DRY_RUN=${DRY_RUN:-0}
@@ -18,6 +18,10 @@ SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS:-4
 SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY:-near_spread}
 CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS=${CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS:-4}
 CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY=${CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY:-near_spread}
+TRAIN_SCOUT_VALUE_MODEL=${TRAIN_SCOUT_VALUE_MODEL:-1}
+SCOUT_REFRESH_VALUE_ROLE=${SCOUT_REFRESH_VALUE_ROLE:-secondary}
+SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES=${SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES:-1}
+SCOUT_VALUE_TAG=${SCOUT_VALUE_TAG:-v25_pairwise_currentref_solvedonly_timeoutfb4_secondary_v1}
 
 mkdir -p "$(dirname "$QUEUE_LOG")"
 
@@ -65,15 +69,16 @@ sys.exit(1)
 PY
 }
 
-log "queue v24simpair after existing Qwen pipelines"
+log "queue v25adapt after existing Qwen pipelines"
 log "blocking pattern: $BLOCKING_PATTERN"
 while process_active >> "$QUEUE_LOG" 2>&1; do
   log "blocking Qwen pipeline still active; sleeping ${WAIT_INTERVAL}s"
   sleep "$WAIT_INTERVAL"
 done
 
-log "no blocking Qwen pipeline active; launching v24simpair scout and hybrid wrapper"
+log "no blocking Qwen pipeline active; launching v25adapt scout and hybrid wrapper"
 log "tail slots: scout=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}/${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY}; clean=${CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}/${CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY}"
+log "scout value refresh: train=${TRAIN_SCOUT_VALUE_MODEL}; role=${SCOUT_REFRESH_VALUE_ROLE}; solved_only_progress_disabled=${SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES}; tag=${SCOUT_VALUE_TAG}"
 
 if [ "$DRY_RUN" = "1" ]; then
   log "dry run enabled; not launching"
@@ -87,6 +92,10 @@ env \
   SCRIPT_DIR="$SCRIPT_DIR" \
   SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS="$SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS" \
   SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY="$SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY" \
+  TRAIN_SCOUT_VALUE_MODEL="$TRAIN_SCOUT_VALUE_MODEL" \
+  SCOUT_REFRESH_VALUE_ROLE="$SCOUT_REFRESH_VALUE_ROLE" \
+  SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES="$SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES" \
+  SCOUT_VALUE_TAG="$SCOUT_VALUE_TAG" \
   nohup bash "$PIPELINE_DIR/run_pairwise_scout_after_clean_wait.sh" \
   > "$SCOUT_LAUNCH_LOG" 2>&1 < /dev/null &
 SCOUT_PID=$!

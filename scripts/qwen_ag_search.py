@@ -104,6 +104,7 @@ _VERIFIER_PRIOR_TYPE_BONUS = {
     'eqangle3': 0.8,
     'on_aline': 0.8,
     'eqdistance+on_tline': 0.5,
+    'eqdistance+eqdistance': 0.9,
 }
 _PROGRESS_SIGNAL_TYPE_BONUS = {
     # Mined from online DDAR-progress positives in the post-v12 clean traces.
@@ -136,6 +137,7 @@ _PROGRESS_SIGNAL_TYPE_BONUS = {
     'on_circle+on_circum': 2.1,
     'on_circle+on_pline': 2.0,
     'eqdistance+on_bline': 2.0,
+    'eqdistance+eqdistance': 2.1,
     'on_circum+on_tline': 2.0,
     # Newly solved IMO 2015 P3 used on_line+on_circum; keep this family near
     # other solved/progress-positive two-construction combos.
@@ -206,6 +208,7 @@ _SIGNAL_ANCHOR_TYPE_BONUS = {
     'on_tline+on_tline': 3.1,
     'eqdistance+on_line': 3.0,
     'on_bline+on_bline': 3.0,
+    'eqdistance+eqdistance': 3.0,
     'eqdistance+on_circle': 2.9,
     'eqdistance+on_bline': 2.8,
     'on_dia': 2.8,

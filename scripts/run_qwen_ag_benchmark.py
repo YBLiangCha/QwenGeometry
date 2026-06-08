@@ -2881,7 +2881,10 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument(
       '--candidate_adaptive_type_penalty_reasons',
-      default='point_too_close,point_too_far,point_already_exists,unknown_point',
+      default=(
+          'point_too_close,point_too_far,point_already_exists,unknown_point,'
+          'invalid_quad_solve,dep_check_fail,invalid_line_intersect,value_error'
+      ),
       help='comma-separated invalid-construction reasons that feed adaptive type penalty',
   )
   parser.add_argument(
@@ -3130,7 +3133,10 @@ def parse_args() -> argparse.Namespace:
   )
   parser.add_argument(
       '--candidate_hard_negative_signal_reasons',
-      default='point_too_close,point_too_far,point_already_exists,unknown_point',
+      default=(
+          'point_too_close,point_too_far,point_already_exists,unknown_point,'
+          'invalid_quad_solve,dep_check_fail,invalid_line_intersect,value_error'
+      ),
       help='comma-separated invalid-construction reasons to log as hard-negative signals',
   )
   return parser.parse_args()

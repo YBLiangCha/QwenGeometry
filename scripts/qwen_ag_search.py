@@ -1579,6 +1579,12 @@ def candidate_value_error_key(text: str) -> str:
     return 'point_too_far'
   if 'invalidquadsolveerror' in lowered:
     return 'invalid_quad_solve'
+  if 'depcheckfailerror' in lowered:
+    return 'dep_check_fail'
+  if 'invalidlineintersecterror' in lowered:
+    return 'invalid_line_intersect'
+  if 'valueerror' in lowered:
+    return 'value_error'
   if 'invalid predicate' in lowered:
     return 'invalid_predicate'
   if 'does not exist' in lowered:

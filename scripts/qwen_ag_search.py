@@ -369,6 +369,7 @@ def candidate_dsl_shape_error(text: str) -> str | None:
     parts = [part.strip() for part in rhs.split(',') if part.strip()]
     if not parts or len(parts) > 2:
       return 'invalid_construction_count'
+    binds_output = False
     for part in parts:
       toks = part.split()
       if len(toks) < 2:
@@ -383,6 +384,9 @@ def candidate_dsl_shape_error(text: str) -> str | None:
         return 'invalid_construction_arg'
       if not _construction_args_shape_ok(point, name, args):
         return 'invalid_construction_args'
+      binds_output = binds_output or _construction_binds_output(point, name, args)
+    if len(parts) > 1 and not binds_output:
+      return 'multi_construction_without_output_binding'
     return None
 
   if not text.endswith(';'):
@@ -470,6 +474,10 @@ def _construction_args_shape_ok(point: str, name: str, args: list[str]) -> bool:
   if name == 'eqdistance':
     return len(other) == 3 and other[0] != other[1]
   return True
+
+
+def _construction_binds_output(point: str, name: str, args: list[str]) -> bool:
+  return name in _CONSTRUCTIVE_REQUIRES_OUTPUT_FIRST_ARG and bool(args) and args[0] == point
 
 
 def _dsl_tokenize_prefix(text: str) -> list[str]:
@@ -560,6 +568,7 @@ def _parse_constructive_prefix(
   if not tokens:
     return 'possible'
   construction_count = 1
+  binds_output = False
   index = 0
   while index < len(tokens):
     if construction_count > 2:
@@ -600,6 +609,9 @@ def _parse_constructive_prefix(
       if has_semicolon:
         if not _arity_accepts(len(args), arity):
           return 'invalid'
+        current_binds_output = _construction_binds_output(point, name, args)
+        if construction_count > 1 and not (binds_output or current_binds_output):
+          return 'invalid'
         return (
             'complete'
             if _construction_args_shape_ok(point, name, args)
@@ -612,6 +624,7 @@ def _parse_constructive_prefix(
         return 'invalid'
       if not _construction_args_shape_ok(point, name, args):
         return 'invalid'
+      binds_output = binds_output or _construction_binds_output(point, name, args)
       construction_count += 1
       index += 1
       if index >= len(tokens):
@@ -619,6 +632,9 @@ def _parse_constructive_prefix(
       continue
     if sep == ';':
       if not _arity_accepts(len(args), arity):
+        return 'invalid'
+      current_binds_output = _construction_binds_output(point, name, args)
+      if construction_count > 1 and not (binds_output or current_binds_output):
         return 'invalid'
       return (
           'complete' if _construction_args_shape_ok(point, name, args) else 'invalid'

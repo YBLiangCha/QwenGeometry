@@ -721,6 +721,16 @@ def candidate_unique_backfill_target(args: argparse.Namespace) -> int:
   return max(1, args.num_return_sequences)
 
 
+def candidate_template_backfill_target(
+    args: argparse.Namespace, current_count: int
+) -> int:
+  base_target = candidate_unique_backfill_target(args)
+  extra_slots = max(0, int(args.candidate_template_backfill_extra_slots or 0))
+  if extra_slots <= 0:
+    return base_target
+  return max(base_target, current_count + extra_slots)
+
+
 def select_depth_candidates_for_eval(
     qs: Any,
     records: list[dict[str, Any]],
@@ -865,7 +875,7 @@ def post_canonical_template_backfill(
   start_len = len(translated_candidates)
   attempted = 0
   needed = target_count - len(translated_candidates)
-  template_budget = max(target_count * 32, needed * 16, 128)
+  template_budget = max(needed * 32, 128)
   for raw in qs.template_backfill_candidates(
       forbidden_points,
       template_budget,
@@ -1458,7 +1468,7 @@ def solve_one(
               forbidden_points,
               seen_candidate_keys,
               seen_raw,
-              candidate_unique_backfill_target(args),
+              candidate_template_backfill_target(args, len(translated_candidates)),
               g_cur,
               pr,
               pt,
@@ -2129,7 +2139,7 @@ def solve_one(
             forbidden_points,
             seen_candidate_keys,
             seen_raw,
-            candidate_unique_backfill_target(args),
+            candidate_template_backfill_target(args, len(translated_candidates)),
             g_cur,
             pr,
             pt,
@@ -2695,6 +2705,16 @@ def parse_args() -> argparse.Namespace:
       help=(
           'tail slot selection strategy: even samples the ranked tail; '
           'near_spread keeps candidates just after the cutoff and spreads the rest'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_template_backfill_extra_slots',
+      type=int,
+      default=0,
+      help=(
+          'after valid LM candidates are translated, still append this many '
+          'template-backfill candidates before reranking; 0 keeps the old '
+          'only-backfill-when-short behavior'
       ),
   )
   parser.add_argument(

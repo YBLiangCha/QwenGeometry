@@ -8,7 +8,7 @@ cd "$WORK"
 
 SCRIPT_DIR=${SCRIPT_DIR:-scripts}
 PIPELINE_DIR=${PIPELINE_DIR:-data/synth_cpt_1m_pruned_v2}
-POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v22tail_v1}
+POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v24simpair_v1}
 QUEUE_LOG=${QUEUE_LOG:-outputs/${POSTRUN_TAG}.queue_after_existing.log}
 WAIT_INTERVAL=${WAIT_INTERVAL:-60}
 DRY_RUN=${DRY_RUN:-0}
@@ -65,14 +65,14 @@ sys.exit(1)
 PY
 }
 
-log "queue v22tail after existing Qwen pipelines"
+log "queue v24simpair after existing Qwen pipelines"
 log "blocking pattern: $BLOCKING_PATTERN"
 while process_active >> "$QUEUE_LOG" 2>&1; do
   log "blocking Qwen pipeline still active; sleeping ${WAIT_INTERVAL}s"
   sleep "$WAIT_INTERVAL"
 done
 
-log "no blocking Qwen pipeline active; launching v22tail scout and hybrid wrapper"
+log "no blocking Qwen pipeline active; launching v24simpair scout and hybrid wrapper"
 log "tail slots: scout=${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}/${SCOUT_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY}; clean=${CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_SLOTS}/${CLEAN_CANDIDATE_DEPTH_TAIL_EVAL_STRATEGY}"
 
 if [ "$DRY_RUN" = "1" ]; then

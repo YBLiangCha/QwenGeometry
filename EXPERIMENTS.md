@@ -1078,6 +1078,10 @@ changes. Tags are the practical version identifiers for this workspace.
   newer v23near queue.  They were terminated while they only had `sleep 300`
   child processes, leaving the current reference run and the version-managed
   v23near queue intact.
+- AG1 full waiter guard was extended to treat
+  `queue_v22tail_after_existing_qwen_pipelines.sh` as Qwen-active work.  This
+  avoids a race where AG1 could start in the few-minute window after the
+  current reference run exits but before the v23near queue wakes and launches.
 
 ## Versioning Rule
 

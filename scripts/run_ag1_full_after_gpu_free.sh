@@ -10,7 +10,7 @@ LOG=${LOG:-$ROOT/ag1_full_b32_beam512_depth16_clean_v1.nohup.log}
 MIN_FREE_MEM_MB=${MIN_FREE_MEM_MB:-28000}
 POLL_SECONDS=${POLL_SECONDS:-120}
 STABLE_POLLS=${STABLE_POLLS:-3}
-QWEN_ACTIVE_PATTERN=${QWEN_ACTIVE_PATTERN:-run_qwen_ag_benchmark.py|train_qwen_aux_lora.py|run_postrun_candidate_signal_sft_and_clean_rerun.sh|run_pairwise_scout_after_clean_wait.sh|run_postv12_solvedbiased_hybrid_after_wait.sh}
+QWEN_ACTIVE_PATTERN=${QWEN_ACTIVE_PATTERN:-run_qwen_ag_benchmark.py|train_qwen_aux_lora.py|run_postrun_candidate_signal_sft_and_clean_rerun.sh|run_pairwise_scout_after_clean_wait.sh|run_postv12_solvedbiased_hybrid_after_wait.sh|queue_v22tail_after_existing_qwen_pipelines.sh}
 
 BATCH_SIZE=${BATCH_SIZE:-32}
 BEAM_SIZE=${BEAM_SIZE:-512}

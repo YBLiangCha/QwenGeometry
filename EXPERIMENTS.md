@@ -1092,6 +1092,10 @@ changes. Tags are the practical version identifiers for this workspace.
   exact rerank name to all non-empty `SECONDARY_VALUE_MODEL` settings, so
   future frontfill/progress reranker variants fail early if the configured
   secondary model is absent.
+- The waiting v23near queue process was safely relaunched from the latest
+  synced script while it only had a `sleep 300` child.  New remote PID:
+  `1275292`.  This ensures the post-reference handoff uses the current
+  `near_spread`/fallback wrappers instead of any earlier bash script state.
 
 ## Versioning Rule
 

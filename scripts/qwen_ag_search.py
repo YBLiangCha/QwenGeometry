@@ -1287,12 +1287,32 @@ def template_backfill_candidates(
   preferred_rank = {
       typ: index for index, typ in enumerate(preferred_construction_types or [])
   }
+  preferred_parts = [
+      (index, set(construction_type_parts(typ)))
+      for typ, index in preferred_rank.items()
+  ]
+
+  def bucket_preference_key(index: int) -> tuple[int, int, int, int]:
+    bucket_type = bucket_types[index]
+    exact_rank = preferred_rank.get(bucket_type)
+    if exact_rank is not None:
+      return (0, exact_rank, 0, index)
+    bucket_parts = set(construction_type_parts(bucket_type))
+    if bucket_parts:
+      best_component: tuple[int, int, int, int] | None = None
+      for pref_rank, parts in preferred_parts:
+        overlap = len(bucket_parts & parts)
+        if overlap <= 0:
+          continue
+        key = (1, pref_rank, -overlap, index)
+        if best_component is None or key < best_component:
+          best_component = key
+      if best_component is not None:
+        return best_component
+    return (2, len(preferred_rank), 0, index)
+
   bucket_order = sorted(
-      range(len(buckets)),
-      key=lambda index: (
-          preferred_rank.get(bucket_types[index], len(preferred_rank) + index),
-          index,
-      ),
+      range(len(buckets)), key=bucket_preference_key
   )
   while len(candidates) < max_candidates:
     progressed = False

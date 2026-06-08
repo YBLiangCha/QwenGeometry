@@ -418,14 +418,58 @@ def select_depth_candidates_for_eval(
     records: list[dict[str, Any]],
     eval_limit: int,
     type_cap: int,
+    tail_slots: int = 0,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-  """Pick a depth-level eval pool while delaying over-represented types."""
+  """Pick a depth-level eval pool while delaying over-represented types.
+
+  A few optional tail slots preserve AG1-like coverage for low-ranked valid
+  candidates.  This matters because AG1 reproduction logs show solved
+  candidates at rank 18/31 in the first LM batch; a strict top-N depth cutoff
+  can miss those even when the LM already generated them.
+  """
   if eval_limit <= 0:
     return records, []
   if len(records) <= eval_limit:
+    for rank, record in enumerate(records):
+      record['_candidate_depth_rank'] = rank
+      record['_candidate_depth_eval_phase'] = 'all'
     return records, []
+
+  for rank, record in enumerate(records):
+    record['_candidate_depth_rank'] = rank
+
+  tail_slots = max(0, min(int(tail_slots or 0), eval_limit))
+  if tail_slots > 0:
+    tail_slots = min(tail_slots, max(0, len(records) - eval_limit))
+  tail_selected: list[dict[str, Any]] = []
+  tail_ids: set[int] = set()
+  if tail_slots > 0:
+    tail_pool = records[eval_limit:]
+    if len(tail_pool) <= tail_slots:
+      tail_selected = list(tail_pool)
+    else:
+      # Evenly sample the ranked tail, including the far end.  For example,
+      # a 32-candidate AG1-style batch with eval_limit=24 and tail_slots=4
+      # selects roughly ranks 24, 26, 28, and 31.
+      for i in range(tail_slots):
+        index = round(i * (len(tail_pool) - 1) / max(1, tail_slots - 1))
+        tail_selected.append(tail_pool[index])
+    for record in tail_selected:
+      tail_ids.add(id(record))
+      record['_candidate_depth_eval_phase'] = 'tail_rank_coverage'
+
+  primary_limit = max(0, eval_limit - len(tail_selected))
   if type_cap <= 0:
-    return records[:eval_limit], records[eval_limit:]
+    selected = [record for record in records if id(record) not in tail_ids][
+        :primary_limit
+    ] + tail_selected
+    selected_ids = {id(record) for record in selected}
+    for record in selected:
+      record.setdefault('_candidate_depth_eval_phase', 'primary')
+    return (
+        [record for record in records if id(record) in selected_ids],
+        [record for record in records if id(record) not in selected_ids],
+    )
 
   selected: list[dict[str, Any]] = []
   delayed: list[dict[str, Any]] = []
@@ -433,11 +477,14 @@ def select_depth_candidates_for_eval(
   type_counts: dict[str, int] = {}
   type_delayed_ids: set[int] = set()
   for record in records:
+    if id(record) in tail_ids:
+      continue
     construction_type = qs.construction_type_key(record['translation'])
     count = type_counts.get(construction_type, 0)
-    if len(selected) < eval_limit and count < type_cap:
+    if len(selected) < primary_limit and count < type_cap:
       selected.append(record)
       selected_ids.add(id(record))
+      record['_candidate_depth_eval_phase'] = 'primary'
       type_counts[construction_type] = count + 1
     else:
       delayed.append(record)
@@ -445,8 +492,13 @@ def select_depth_candidates_for_eval(
         type_delayed_ids.add(id(record))
 
   for record in delayed:
-    if len(selected) >= eval_limit:
+    if len(selected) >= primary_limit:
       break
+    selected.append(record)
+    selected_ids.add(id(record))
+    record['_candidate_depth_eval_phase'] = 'primary_backfill'
+
+  for record in tail_selected:
     selected.append(record)
     selected_ids.add(id(record))
 
@@ -1055,6 +1107,7 @@ def solve_one(
           ranked_depth_candidates,
           args.candidate_depth_eval_limit,
           args.candidate_depth_type_eval_cap,
+          args.candidate_depth_tail_eval_slots,
       )
       for record in pruned_depth_candidates:
         qs.event(
@@ -1071,6 +1124,9 @@ def solve_one(
             ),
             candidate_depth_eval_limit=args.candidate_depth_eval_limit,
             candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
+            candidate_depth_tail_eval_slots=args.candidate_depth_tail_eval_slots,
+            candidate_depth_rank=record.get('_candidate_depth_rank'),
+            candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
             source=record.get('source', 'lm'),
         )
       parallel_tasks = []
@@ -1078,6 +1134,22 @@ def solve_one(
         raw = record['raw']
         lm_score = record['lm_score']
         translation = record['translation']
+        qs.event(
+            events_file,
+            kind='candidate_depth_eval_selected',
+            depth=depth,
+            raw=raw,
+            translation=translation,
+            candidate_rerank=args.candidate_rerank,
+            candidate_rerank_score=record.get('_candidate_rerank_score'),
+            candidate_construction_type=qs.construction_type_key(translation),
+            candidate_depth_eval_limit=args.candidate_depth_eval_limit,
+            candidate_depth_type_eval_cap=args.candidate_depth_type_eval_cap,
+            candidate_depth_tail_eval_slots=args.candidate_depth_tail_eval_slots,
+            candidate_depth_rank=record.get('_candidate_depth_rank'),
+            candidate_depth_eval_phase=record.get('_candidate_depth_eval_phase'),
+            source=record.get('source', 'lm'),
+        )
         p_new_txt = qs.insert_aux_to_premise(record['pstring'], translation)
         prompt_next = record['prompt'] + ' ' + raw + ' x00'
         if args.candidate_ddar_workers > 1:
@@ -1743,6 +1815,15 @@ def parse_args() -> argparse.Namespace:
       help=(
           'delay candidates from a construction type after this many selected '
           'depth-level eval slots; 0 disables'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_depth_tail_eval_slots',
+      type=int,
+      default=0,
+      help=(
+          'reserve this many depth-level DDAR eval slots for evenly sampled '
+          'low-rank candidates beyond --candidate_depth_eval_limit; 0 disables'
       ),
   )
   parser.add_argument(

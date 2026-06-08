@@ -638,7 +638,10 @@ def maybe_add_timeout_beam_fallback(
     args: argparse.Namespace,
 ) -> None:
   limit = int(getattr(args, 'candidate_timeout_beam_fallback_limit', 0) or 0)
-  if limit <= 0 or len(next_beam) > 0 or not timeout_items:
+  mode = getattr(args, 'candidate_timeout_beam_fallback_mode', 'empty')
+  if limit <= 0 or not timeout_items:
+    return
+  if mode == 'empty' and len(next_beam) > 0:
     return
   ranked = sorted(
       timeout_items,
@@ -693,6 +696,7 @@ def maybe_add_timeout_beam_fallback(
         candidate_construction_type=item.get('candidate_construction_type'),
         fallback_rank=fallback_rank,
         fallback_limit=limit,
+        fallback_mode=mode,
         elapsed_sec=item.get('elapsed_sec'),
         parent_fact_context_count=len(fallback_fact_context),
     )
@@ -1672,6 +1676,16 @@ def parse_args() -> argparse.Namespace:
           'when all parallel candidate DDAR checks at a depth time out, carry '
           'top-N timed-out candidates into the next beam without fact context; '
           '0 disables'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_timeout_beam_fallback_mode',
+      choices=['empty', 'append'],
+      default='empty',
+      help=(
+          'empty keeps the old behavior and only uses timeout fallback when the '
+          'next beam is empty; append also lets timed-out candidates compete '
+          'with completed candidates in the next beam'
       ),
   )
   parser.add_argument('--qwen_model')

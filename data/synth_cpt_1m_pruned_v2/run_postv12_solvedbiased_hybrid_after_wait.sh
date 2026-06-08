@@ -18,7 +18,7 @@ REFERENCE_MIN_ROWS=${REFERENCE_MIN_ROWS:-1}
 REFERENCE_ALLOW_INCOMPLETE=${REFERENCE_ALLOW_INCOMPLETE:-0}
 
 WAIT_FOR_SCOUT=${WAIT_FOR_SCOUT:-1}
-SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v18coverage_scout_depth16_typecap4_t160_w100_nrs48_qm3_timeoutfb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT:-4}append_progbeam_progprefix_factmem_binddedup_v1}
+SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v18coverage_scout_depth16_typecap4_fact12_t160_w100_nrs48_qm3_timeoutfb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT:-4}append_progbeam_progprefix_factmem_binddedup_v1}
 SCOUT_OUT_DIR=${SCOUT_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${SCOUT_TAG}}
 SCOUT_SUMMARY_JSONL=${SCOUT_SUMMARY_JSONL:-$SCOUT_OUT_DIR/summary.jsonl}
 SCOUT_PROCESS_PATTERN=${SCOUT_PROCESS_PATTERN:-run_pairwise_scout_after_clean_wait.sh|run_qwen_ag_benchmark.py.*${SCOUT_TAG}}
@@ -50,7 +50,8 @@ CLEAN_CANDIDATE_BEAM_PROGRESS_WEIGHT=${CLEAN_CANDIDATE_BEAM_PROGRESS_WEIGHT:-0.6
 CLEAN_CANDIDATE_BEAM_PROGRESS_CAP=${CLEAN_CANDIDATE_BEAM_PROGRESS_CAP:-4.0}
 CLEAN_CANDIDATE_DECODE_BEAM_LIMIT=${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT:-16}
 CLEAN_CANDIDATE_PROMPT_SAMPLING=${CLEAN_CANDIDATE_PROMPT_SAMPLING:-mixed_progress_constructive}
-CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front8_progress_v18coverage_progbeam_decbeam${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT}_depth24_typecap6_t200_w120_nrs48_qm3_timeoutfb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}append_progprefix_factmem_binddedup_v1}
+CLEAN_LM_FACT_CONTEXT_TOP_K=${CLEAN_LM_FACT_CONTEXT_TOP_K:-12}
+CLEAN_RERUN_TAG=${CLEAN_RERUN_TAG:-unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front8_progress_v18coverage_progbeam_decbeam${CLEAN_CANDIDATE_DECODE_BEAM_LIMIT}_depth24_typecap6_fact12_t200_w120_nrs48_qm3_timeoutfb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT}append_progprefix_factmem_binddedup_v1}
 
 STAGE4_SIGNAL_MIN_PROGRESS_DELTA=${STAGE4_SIGNAL_MIN_PROGRESS_DELTA:-80}
 STAGE4_SIGNAL_MAX_ELAPSED_SEC=${STAGE4_SIGNAL_MAX_ELAPSED_SEC:-90}
@@ -199,6 +200,7 @@ log "hybrid clean candidate beam score: $CLEAN_CANDIDATE_BEAM_SCORE"
 log "hybrid clean candidate beam progress: weight=$CLEAN_CANDIDATE_BEAM_PROGRESS_WEIGHT; cap=$CLEAN_CANDIDATE_BEAM_PROGRESS_CAP"
 log "hybrid clean candidate decode beam limit: $CLEAN_CANDIDATE_DECODE_BEAM_LIMIT"
 log "hybrid clean candidate prompt sampling: $CLEAN_CANDIDATE_PROMPT_SAMPLING"
+log "hybrid clean LM fact context top-k: $CLEAN_LM_FACT_CONTEXT_TOP_K"
 log "hybrid clean value models: primary=$VALUE_MODEL; secondary=${CLEAN_SECONDARY_VALUE_MODEL:-none}"
 log "stage4 signal filters: min_delta=${STAGE4_SIGNAL_MIN_PROGRESS_DELTA}; max_elapsed=${STAGE4_SIGNAL_MAX_ELAPSED_SEC}; min_eff=${STAGE4_SIGNAL_MIN_PROGRESS_EFFICIENCY}; per_problem=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_PROBLEM}; per_type=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_TYPE}; solved_repeat=${STAGE4_SIGNAL_SOLVED_REPEAT}"
 
@@ -239,6 +241,7 @@ env \
   CLEAN_CANDIDATE_BEAM_PROGRESS_CAP="$CLEAN_CANDIDATE_BEAM_PROGRESS_CAP" \
   CLEAN_CANDIDATE_DECODE_BEAM_LIMIT="$CLEAN_CANDIDATE_DECODE_BEAM_LIMIT" \
   CLEAN_CANDIDATE_PROMPT_SAMPLING="$CLEAN_CANDIDATE_PROMPT_SAMPLING" \
+  CLEAN_LM_FACT_CONTEXT_TOP_K="$CLEAN_LM_FACT_CONTEXT_TOP_K" \
   CLEAN_FRONTFILL_LIMIT="$CLEAN_FRONTFILL_LIMIT" \
   CLEAN_SECONDARY_VALUE_MODEL="$CLEAN_SECONDARY_VALUE_MODEL" \
   VALUE_MODEL="$VALUE_MODEL" \

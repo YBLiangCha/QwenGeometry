@@ -1335,7 +1335,7 @@ def solve_one(
     qs.event(
         events_file,
         kind='candidate_static_progress_type_bonus_loaded',
-        path=args.candidate_static_progress_type_bonus,
+        bonus_path=args.candidate_static_progress_type_bonus,
         count=len(static_progress_type_bonuses),
         per_problem_count=len(problem_static_progress_type_bonuses),
         top=sorted(

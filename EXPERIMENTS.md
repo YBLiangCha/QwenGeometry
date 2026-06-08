@@ -6,17 +6,17 @@ changes. Tags are the practical version identifiers for this workspace.
 ## Source Version State
 
 - Git remote: `git@github.com:YBLiangCha/QwenGeometry.git`
-- Current GitHub source head: `postv12_progress_beam_score_v1`.
+- Current GitHub source head: `postv12_progress_beam_score_v2`.
 - Current running v12 clean bench tag:
   `unsolved_factctx_promptaug_top8_candidate_signal_postrun_value_v12_default_v1_depth48_t240_w150_nrs48_qm3_sigrep4_blinedia_statededup_nodediv_dsltpl_combotpl_rarecombo_vprior_v1`.
 - Current v12 clean source snapshot:
   `/tmp/qwen_ag_scripts_c541dd4` (`value_v12_default_queue_v1`). This active
   process is intentionally not overwritten.
 - Current waiting scout queue source:
-  `/tmp/qwen_ag_scripts_postv12_progress_beam_score_v1`, tag
+  `/tmp/qwen_ag_scripts_postv12_progress_beam_score_v2`, tag
   `unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v18coverage_after_v12_depth16_decbeam16_t160_w100_nrs48_qm3_timeoutfb4_progbeam_progprefix_factmem_binddedup_salvage_v1`.
 - Current waiting post-v12 stage4 queue source:
-  `/tmp/qwen_ag_scripts_postv12_progress_beam_score_v1`, tag
+  `/tmp/qwen_ag_scripts_postv12_progress_beam_score_v2`, tag
   `unsolved_factctx_promptaug_top8_stage4_solvedbiased_postv12_hybrid_v12_front8_progress_v18coverage_progbeam_decbeam16_depth24_t200_w120_nrs48_qm3_timeoutfb4_progprefix_factmem_binddedup_salvage_v1`.
 - Running-workspace scripts are intentionally versioned in `/tmp` snapshots
   rather than overwritten in-place. The benchmark uses spawn-based candidate
@@ -870,6 +870,16 @@ changes. Tags are the practical version identifiers for this workspace.
   DDAR-progress positives with high fact deltas but sometimes low rerank scores.
   Dynamic fact memory only helps if those progress-bearing states remain in the
   beam long enough to seed the next LM prompt.
+
+### `postv12_progress_beam_score_v2`
+
+- Git tag: `postv12_progress_beam_score_v2`.
+- Keeps the v1 behavior and fixes post-v12 stage4 defaults so the script waits
+  for the matching progress-beam scout tag by default.
+- Changes the stage4 queue-log default from the generic
+  `postv12_solvedbiased_hybrid_after_wait_v1.queue.log` to
+  `outputs/${POSTRUN_TAG}.queue.log`, which makes monitoring unambiguous when
+  multiple post-v12 queues exist.
 
 ## Versioning Rule
 

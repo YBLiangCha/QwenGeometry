@@ -18,16 +18,16 @@ REFERENCE_MIN_ROWS=${REFERENCE_MIN_ROWS:-1}
 REFERENCE_ALLOW_INCOMPLETE=${REFERENCE_ALLOW_INCOMPLETE:-0}
 
 WAIT_FOR_SCOUT=${WAIT_FOR_SCOUT:-1}
-SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v16_front12_v12_scout_after_v12_depth16_t160_w100_nrs48_qm3_v1}
+SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v18coverage_scout_depth16_t160_w100_nrs48_qm3_timeoutfb${CLEAN_TIMEOUT_BEAM_FALLBACK_LIMIT:-4}_progbeam_progprefix_factmem_binddedup_v1}
 SCOUT_OUT_DIR=${SCOUT_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${SCOUT_TAG}}
 SCOUT_SUMMARY_JSONL=${SCOUT_SUMMARY_JSONL:-$SCOUT_OUT_DIR/summary.jsonl}
 SCOUT_PROCESS_PATTERN=${SCOUT_PROCESS_PATTERN:-run_pairwise_scout_after_clean_wait.sh|run_qwen_ag_benchmark.py.*${SCOUT_TAG}}
 
 WAIT_INTERVAL=${WAIT_INTERVAL:-300}
-QUEUE_LOG=${QUEUE_LOG:-outputs/postv12_solvedbiased_hybrid_after_wait_v1.queue.log}
 DRY_RUN=${DRY_RUN:-0}
 
 POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v1}
+QUEUE_LOG=${QUEUE_LOG:-outputs/${POSTRUN_TAG}.queue.log}
 SFT_OUT=${SFT_OUT:-outputs/stage4_candidate_signal_solvedbiased_after_v12_${POSTRUN_TAG}}
 BASE_ADAPTER=${BASE_ADAPTER:-outputs/stage3_candidate_signal_after_factctx_lora_qwen2_5_7b_candidate_signal_sft_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_postrun_value_v12_default_v1}
 

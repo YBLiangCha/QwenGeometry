@@ -17,7 +17,7 @@ WAIT_ALLOW_INCOMPLETE=${WAIT_ALLOW_INCOMPLETE:-0}
 
 SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT:-4}
 SCOUT_TIMEOUT_BEAM_FALLBACK_MODE=${SCOUT_TIMEOUT_BEAM_FALLBACK_MODE:-append}
-SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v19coverage_ptype2_vprior2_softto5_scout_depth16_typecap4_fact12_t160_w100_nrs48_qm3_timeoutfb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}append_progbeam_progprefix_factmem_binddedup_v1}
+SCOUT_TAG=${SCOUT_TAG:-unsolved_factctx_promptaug_top8_hybrid_v12_front8_progress_v20adpcov_ptype2_vprior2_softto5_scout_depth16_typecap4_fact12_t160_w100_nrs48_qm3_timeoutfb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}append_progbeam_progprefix_factmem_binddedup_v1}
 SCOUT_OUT_DIR=${SCOUT_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${SCOUT_TAG}}
 SCOUT_LOG=${SCOUT_LOG:-outputs/${SCOUT_TAG}.log}
 SCOUT_QUEUE_LOG=${SCOUT_QUEUE_LOG:-outputs/${SCOUT_TAG}.queue.log}
@@ -32,7 +32,7 @@ SCOUT_FRONTFILL_LIMIT=${SCOUT_FRONTFILL_LIMIT:-8}
 TRAIN_SCOUT_VALUE_MODEL=${TRAIN_SCOUT_VALUE_MODEL:-0}
 SCOUT_REFRESH_VALUE_ROLE=${SCOUT_REFRESH_VALUE_ROLE:-primary}
 VALUE_MODEL_APPEND_SCRIPT=${VALUE_MODEL_APPEND_SCRIPT:-$SCRIPT_DIR/../data/synth_cpt_1m_pruned_v2/run_value_model_append_partial.sh}
-SCOUT_VALUE_TAG=${SCOUT_VALUE_TAG:-v19_pairwise_postv12_solvedonly_timeoutfb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}_vprior2_softto5_v1}
+SCOUT_VALUE_TAG=${SCOUT_VALUE_TAG:-v20_pairwise_postv12_solvedonly_timeoutfb${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT}_vprior2_softto5_adpcov_v1}
 SCOUT_VALUE_OUT_DIR=${SCOUT_VALUE_OUT_DIR:-outputs/candidate_value_model_${SCOUT_VALUE_TAG}}
 BASE_VALUE_DATA=${BASE_VALUE_DATA:-outputs/candidate_value_model_v16_pairwise_solved_biased_progress_filter_oldfull_current4_v1/candidate_value_data.jsonl}
 SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES=${SCOUT_VALUE_DISABLE_PROGRESS_POSITIVES:-1}

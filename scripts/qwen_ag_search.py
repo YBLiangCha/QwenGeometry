@@ -1076,20 +1076,37 @@ def progress_type_coverage_records(
     records: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
   """Order candidates from progress-positive construction families."""
+
+  def frontfill_score(record: dict[str, Any]) -> float:
+    try:
+      return float(record.get('_candidate_frontfill_score', 0.0))
+    except (TypeError, ValueError):
+      return 0.0
+
   buckets: dict[str, list[dict[str, Any]]] = {}
+  bucket_scores: dict[str, float] = {}
   for record in records:
     key = construction_type_key(record['translation'])
-    if key not in _PROGRESS_SIGNAL_TYPE_BONUS:
+    type_bonus = _PROGRESS_SIGNAL_TYPE_BONUS.get(key)
+    if type_bonus is None:
       continue
     buckets.setdefault(key, []).append(record)
+    bucket_scores[key] = max(
+        bucket_scores.get(key, float('-inf')),
+        frontfill_score(record) + type_bonus,
+    )
   for bucket in buckets.values():
     bucket.sort(
-        key=lambda record: float(record.get('_candidate_frontfill_score', 0.0)),
+        key=frontfill_score,
         reverse=True,
     )
   ordered_keys = sorted(
       buckets,
-      key=lambda key: (-_PROGRESS_SIGNAL_TYPE_BONUS[key], key),
+      key=lambda key: (
+          -bucket_scores[key],
+          -_PROGRESS_SIGNAL_TYPE_BONUS[key],
+          key,
+      ),
   )
   reranked: list[dict[str, Any]] = []
   while len(reranked) < sum(len(bucket) for bucket in buckets.values()):
@@ -1098,6 +1115,7 @@ def progress_type_coverage_records(
       if buckets[key]:
         record = buckets[key].pop(0)
         record['_candidate_progress_type_bonus'] = _PROGRESS_SIGNAL_TYPE_BONUS[key]
+        record['_candidate_progress_type_bucket_score'] = bucket_scores[key]
         reranked.append(record)
         progressed = True
     if not progressed:

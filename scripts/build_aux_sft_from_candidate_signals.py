@@ -52,6 +52,42 @@ def iter_events(events_dir: Path):
       yield path, line_no, event
 
 
+def normalize_candidate_text(text: str | None) -> str:
+  text = str(text or '').strip()
+  while text.endswith(';'):
+    text = text[:-1].strip()
+  return ' '.join(text.split())
+
+
+def candidate_key(depth: Any, raw: str | None) -> tuple[int | None, str]:
+  try:
+    parsed_depth = int(depth)
+  except (TypeError, ValueError):
+    parsed_depth = None
+  return parsed_depth, normalize_candidate_text(raw)
+
+
+def parse_ddar_candidate_tag(tag: str | None) -> tuple[int | None, str] | None:
+  match = re.match(r'^depth([0-9]+):(.*)$', str(tag or ''))
+  if not match:
+    return None
+  return int(match.group(1)), normalize_candidate_text(match.group(2))
+
+
+def build_ddar_lookup(events_dir: Path) -> dict[tuple[str, tuple[int | None, str]], dict[str, Any]]:
+  lookup: dict[tuple[str, tuple[int | None, str]], dict[str, Any]] = {}
+  if not events_dir.exists():
+    return lookup
+  for path, _, event in iter_events(events_dir):
+    if event.get('kind') != 'ddar_done':
+      continue
+    parsed = parse_ddar_candidate_tag(event.get('tag'))
+    if parsed is None:
+      continue
+    lookup[(str(path), parsed)] = event
+  return lookup
+
+
 def iter_event_sources(events_dir: Path, extra_events_dirs: list[str]):
   yield None, events_dir
   for index, extra_events_dir in enumerate(extra_events_dirs):
@@ -114,6 +150,42 @@ def parse_args() -> argparse.Namespace:
       help='cap DDAR-progress rows per construction type after ranking; 0 disables',
   )
   parser.add_argument(
+      '--min_progress_goal_fact_overlap',
+      type=int,
+      default=0,
+      help=(
+          'minimum number of goal point tokens appearing in candidate DDAR '
+          'fact_context for DDAR-progress rows; 0 disables'
+      ),
+  )
+  parser.add_argument(
+      '--progress_goal_fact_overlap_weight',
+      type=float,
+      default=0.0,
+      help='ranking bonus weight for goal/fact token overlap on progress rows',
+  )
+  parser.add_argument(
+      '--min_progress_goal_fact_score',
+      type=float,
+      default=0.0,
+      help=(
+          'minimum goal-aware fact score for DDAR-progress rows; score is '
+          'max shared goal points with a predicate-match bonus'
+      ),
+  )
+  parser.add_argument(
+      '--progress_goal_fact_score_weight',
+      type=float,
+      default=0.0,
+      help='ranking bonus weight for goal-aware fact score on progress rows',
+  )
+  parser.add_argument(
+      '--store_candidate_fact_context',
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help='store matched candidate DDAR fact_context and goal-overlap metadata in rows',
+  )
+  parser.add_argument(
       '--solved_repeat',
       type=int,
       default=1,
@@ -131,7 +203,85 @@ def numeric(value: Any, default: float = 0.0) -> float:
     return default
 
 
-def keep_event(event: dict[str, Any], args: argparse.Namespace) -> bool:
+GEOMETRY_WORDS = {
+    'aconst',
+    'coll',
+    'cong',
+    'cyclic',
+    'eqangle',
+    'eqratio',
+    'eqdistance',
+    'midp',
+    'para',
+    'perp',
+    'simtri',
+    'contri',
+    'circle',
+    'line',
+    'angle',
+}
+
+
+def goal_text(problem_after_aux: str | None, prompt: str | None = None) -> str:
+  for text in (problem_after_aux, prompt):
+    text = str(text or '')
+    if '?' in text:
+      return text.rsplit('?', 1)[-1]
+  return ''
+
+
+def text_tokens(text: str) -> list[str]:
+  return re.findall(r'[a-z][a-z0-9_]*', str(text or '').lower())
+
+
+def goal_point_tokens(event: dict[str, Any]) -> set[str]:
+  tokens = set(text_tokens(goal_text(event.get('problem_after_aux'), event.get('prompt'))))
+  return {token for token in tokens if token not in GEOMETRY_WORDS}
+
+
+def goal_predicate(event: dict[str, Any]) -> str:
+  tokens = text_tokens(goal_text(event.get('problem_after_aux'), event.get('prompt')))
+  return tokens[0] if tokens else ''
+
+
+def fact_context_tokens(ddar_event: dict[str, Any] | None) -> set[str]:
+  facts = []
+  if ddar_event:
+    facts = ddar_event.get('fact_context') or []
+  text = ' '.join(str(fact).lower() for fact in facts)
+  tokens = set(text_tokens(text))
+  return {token for token in tokens if token not in GEOMETRY_WORDS}
+
+
+def goal_fact_overlap(event: dict[str, Any], ddar_event: dict[str, Any] | None) -> int:
+  return len(goal_point_tokens(event) & fact_context_tokens(ddar_event))
+
+
+def goal_fact_score(event: dict[str, Any], ddar_event: dict[str, Any] | None) -> float:
+  if not ddar_event:
+    return 0.0
+  goal_points = goal_point_tokens(event)
+  if not goal_points:
+    return 0.0
+  predicate = goal_predicate(event)
+  best = 0.0
+  for fact in ddar_event.get('fact_context') or []:
+    tokens = text_tokens(str(fact))
+    if not tokens:
+      continue
+    fact_predicate = tokens[0]
+    fact_points = {token for token in tokens[1:] if token not in GEOMETRY_WORDS}
+    shared_points = len(goal_points & fact_points)
+    predicate_bonus = 2.0 if predicate and fact_predicate == predicate else 0.0
+    best = max(best, shared_points + predicate_bonus)
+  return best
+
+
+def keep_event(
+    event: dict[str, Any],
+    args: argparse.Namespace,
+    ddar_event: dict[str, Any] | None = None,
+) -> bool:
   reason = event.get('reason')
   if reason == 'candidate_solved':
     return True
@@ -148,11 +298,23 @@ def keep_event(event: dict[str, Any], args: argparse.Namespace) -> bool:
     elapsed_sec = numeric(elapsed, default=0.0)
     if elapsed_sec <= 0 or delta / max(elapsed_sec, 1.0) < args.min_progress_efficiency:
       return False
+  if args.min_progress_goal_fact_overlap > 0:
+    if goal_fact_overlap(event, ddar_event) < args.min_progress_goal_fact_overlap:
+      return False
+  if args.min_progress_goal_fact_score > 0:
+    if goal_fact_score(event, ddar_event) < args.min_progress_goal_fact_score:
+      return False
   return True
 
 
 def row_from_event(
-    event: dict[str, Any], path: Path, line_no: int, source_label: str | None = None
+    event: dict[str, Any],
+    path: Path,
+    line_no: int,
+    source_label: str | None = None,
+    ddar_event: dict[str, Any] | None = None,
+    store_candidate_fact_context: bool = False,
+    store_goal_fact_metadata: bool = False,
 ) -> dict[str, Any]:
   problem = event.get('problem') or path.stem
   row_id = f'{safe_name(problem)}::{path.stem}::{line_no}'
@@ -160,7 +322,7 @@ def row_from_event(
     row_id = f'{safe_name(problem)}::{source_label}::{path.stem}::{line_no}'
   prompt = str(event.get('prompt') or '').rstrip()
   target = str(event.get('target') or '').strip()
-  return {
+  row = {
       'id': row_id,
       'source_problem': problem,
       'source_events': source_label or 'primary',
@@ -180,15 +342,29 @@ def row_from_event(
       'candidate_ddar_status': event.get('candidate_ddar_status'),
       'candidate_solved': event.get('candidate_solved'),
   }
+  if store_goal_fact_metadata:
+    row['candidate_goal_fact_overlap'] = goal_fact_overlap(event, ddar_event)
+    row['candidate_goal_fact_score'] = goal_fact_score(event, ddar_event)
+    row['candidate_goal_predicate'] = goal_predicate(event)
+    row['candidate_goal_tokens'] = sorted(goal_point_tokens(event))
+  if store_candidate_fact_context and ddar_event:
+    row['candidate_fact_context'] = list(ddar_event.get('fact_context') or [])
+  return row
 
 
-def progress_rank_key(row: dict[str, Any]) -> tuple[float, float, float, float]:
+def progress_rank_key(
+    row: dict[str, Any], args: argparse.Namespace
+) -> tuple[float, float, float, float, float, float]:
   delta = numeric(row.get('progress_delta_dependencies'))
   elapsed = numeric(row.get('candidate_elapsed_sec'), default=0.0)
   efficiency = delta / max(elapsed, 1.0) if elapsed >= 0 else 0.0
   rerank_score = numeric(row.get('candidate_rerank_score'))
+  goal_overlap = numeric(row.get('candidate_goal_fact_overlap'))
+  goal_score = numeric(row.get('candidate_goal_fact_score'))
+  goal_bonus = max(0.0, float(args.progress_goal_fact_overlap_weight)) * goal_overlap
+  goal_bonus += max(0.0, float(args.progress_goal_fact_score_weight)) * goal_score
   # Rank efficient, high-delta progress first; slow fact growth is noisy.
-  return (efficiency, delta, rerank_score, -elapsed)
+  return (efficiency + goal_bonus, goal_score, goal_overlap, delta, rerank_score, -elapsed)
 
 
 def select_rows(rows: list[dict[str, Any]], args: argparse.Namespace) -> list[dict[str, Any]]:
@@ -206,7 +382,9 @@ def select_rows(rows: list[dict[str, Any]], args: argparse.Namespace) -> list[di
 
   progress_by_problem: dict[str, int] = {}
   progress_by_type: dict[str, int] = {}
-  for row in sorted(progress_rows, key=progress_rank_key, reverse=True):
+  for row in sorted(
+      progress_rows, key=lambda row: progress_rank_key(row, args), reverse=True
+  ):
     problem = str(row.get('source_problem') or '')
     construction_type = str(row.get('candidate_construction_type') or 'unknown')
     if (
@@ -249,19 +427,51 @@ def main() -> None:
           counts.get(f'missing_events_dir:{source_label or "primary"}', 0) + 1
       )
       continue
+    ddar_lookup = build_ddar_lookup(source_events_dir)
     source_key = source_label or 'primary'
     for path, line_no, event in iter_events(source_events_dir):
       if event.get('kind') != 'candidate_sft_signal':
         continue
       counts['signals_seen'] = counts.get('signals_seen', 0) + 1
       counts[f'signals_seen:{source_key}'] = counts.get(f'signals_seen:{source_key}', 0) + 1
-      if not keep_event(event, args):
+      ddar_event = ddar_lookup.get((str(path), candidate_key(event.get('depth'), event.get('target'))))
+      if not keep_event(event, args, ddar_event):
         counts['signals_skipped'] = counts.get('signals_skipped', 0) + 1
         counts[f'signals_skipped:{source_key}'] = (
             counts.get(f'signals_skipped:{source_key}', 0) + 1
         )
+        if event.get('reason') == 'ddar_progress_positive':
+          if (
+              args.min_progress_goal_fact_overlap > 0
+              and goal_fact_overlap(event, ddar_event)
+              < args.min_progress_goal_fact_overlap
+          ):
+            counts['signals_skipped_goal_fact_overlap'] = (
+                counts.get('signals_skipped_goal_fact_overlap', 0) + 1
+            )
+          if (
+              args.min_progress_goal_fact_score > 0
+              and goal_fact_score(event, ddar_event) < args.min_progress_goal_fact_score
+          ):
+            counts['signals_skipped_goal_fact_score'] = (
+                counts.get('signals_skipped_goal_fact_score', 0) + 1
+            )
         continue
-      row = row_from_event(event, path, line_no, source_label=source_label)
+      row = row_from_event(
+          event,
+          path,
+          line_no,
+          source_label=source_label,
+          ddar_event=ddar_event,
+          store_candidate_fact_context=args.store_candidate_fact_context,
+          store_goal_fact_metadata=(
+              args.store_candidate_fact_context
+              or args.min_progress_goal_fact_overlap > 0
+              or args.progress_goal_fact_overlap_weight > 0
+              or args.min_progress_goal_fact_score > 0
+              or args.progress_goal_fact_score_weight > 0
+          ),
+      )
       if not row['prompt'] or not row['target']:
         counts['missing_prompt_or_target'] = counts.get('missing_prompt_or_target', 0) + 1
         continue
@@ -310,6 +520,11 @@ def main() -> None:
           'min_progress_efficiency': args.min_progress_efficiency,
           'max_progress_rows_per_problem': args.max_progress_rows_per_problem,
           'max_progress_rows_per_type': args.max_progress_rows_per_type,
+          'min_progress_goal_fact_overlap': args.min_progress_goal_fact_overlap,
+          'progress_goal_fact_overlap_weight': args.progress_goal_fact_overlap_weight,
+          'min_progress_goal_fact_score': args.min_progress_goal_fact_score,
+          'progress_goal_fact_score_weight': args.progress_goal_fact_score_weight,
+          'store_candidate_fact_context': args.store_candidate_fact_context,
           'solved_repeat': max(1, args.solved_repeat),
       },
   }

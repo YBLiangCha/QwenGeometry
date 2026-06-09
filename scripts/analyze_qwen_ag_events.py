@@ -467,7 +467,10 @@ def analyze_problem(
       record = candidate_record(event, lookup)
       candidate_hard_negative_signal_types[record['construction_type']] += 1
       candidate_hard_negative_signal_sources[record['source']] += 1
-    elif kind == 'candidate_adaptive_type_failure':
+    elif kind in (
+        'candidate_adaptive_type_failure',
+        'candidate_adaptive_type_ddar_failure',
+    ):
       adaptive_type_failure_reasons[event.get('reason') or 'unknown'] += 1
       record = candidate_record(event, lookup)
       adaptive_type_failure_types[record['construction_type']] += 1

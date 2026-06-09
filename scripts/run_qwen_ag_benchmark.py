@@ -588,6 +588,71 @@ def note_adaptive_type_failure(
     )
 
 
+def candidate_ddar_error_key(error: str | None) -> str:
+  lowered = str(error or '').lower()
+  if 'timeout' in lowered:
+    return 'timeout'
+  if 'pointtoocloseerror' in lowered:
+    return 'point_too_close'
+  if 'pointtoofarerror' in lowered:
+    return 'point_too_far'
+  if 'depcheckfailerror' in lowered:
+    return 'dep_check_fail'
+  if 'invalidquadsolveerror' in lowered:
+    return 'invalid_quad_solve'
+  if 'invalid predicate' in lowered:
+    return 'invalid_predicate'
+  if 'does not exist' in lowered:
+    return 'unknown_point'
+  return 'other_error'
+
+
+def note_adaptive_ddar_failure(
+    qs: Any,
+    events_file: str,
+    adaptive_type_failures: dict[str, int],
+    problem_name: str,
+    depth: int,
+    raw: str,
+    translation: str,
+    error: str | None,
+    args: argparse.Namespace,
+    source: str = 'lm',
+    construction_type: str | None = None,
+) -> None:
+  if (
+      not args.candidate_adaptive_type_penalty
+      or not args.candidate_adaptive_type_penalty_ddar_errors
+  ):
+    return
+  reason = candidate_ddar_error_key(error)
+  if reason not in csv_arg_set(args.candidate_adaptive_type_penalty_ddar_error_reasons):
+    return
+  construction_type = construction_type or qs.construction_type_key(translation)
+  if not construction_type or construction_type == 'error':
+    return
+  failures = adaptive_type_failures.get(construction_type, 0) + 1
+  adaptive_type_failures[construction_type] = failures
+  threshold = max(1, int(args.candidate_adaptive_type_penalty_threshold))
+  if failures == threshold or (
+      failures > threshold and failures % max(threshold, 16) == 0
+  ):
+    qs.event(
+        events_file,
+        kind='candidate_adaptive_type_ddar_failure',
+        problem=problem_name,
+        depth=depth,
+        raw=raw,
+        translation=translation,
+        error=error,
+        reason=reason,
+        source=source,
+        candidate_construction_type=construction_type,
+        candidate_adaptive_type_failures=failures,
+        candidate_adaptive_type_penalty_threshold=threshold,
+    )
+
+
 def adaptive_type_penalty(
     failures: int,
     threshold: int,
@@ -2110,6 +2175,19 @@ def solve_one(
       timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
         if item.get('error'):
+          note_adaptive_ddar_failure(
+              qs,
+              events_file,
+              adaptive_type_failures,
+              p.url,
+              depth,
+              item['raw'],
+              item['translation'],
+              item.get('error'),
+              args,
+              source=item.get('candidate_source') or 'lm',
+              construction_type=item.get('candidate_construction_type'),
+          )
           qs.event(
               events_file,
               kind='candidate_ddar_error',
@@ -2715,6 +2793,19 @@ def solve_one(
       timeout_items = []
       for item in run_candidate_tasks_parallel(parallel_tasks, args):
         if item.get('error'):
+          note_adaptive_ddar_failure(
+              qs,
+              events_file,
+              adaptive_type_failures,
+              p.url,
+              depth,
+              item['raw'],
+              item['translation'],
+              item.get('error'),
+              args,
+              source=item.get('candidate_source') or 'lm',
+              construction_type=item.get('candidate_construction_type'),
+          )
           qs.event(
               events_file,
               kind='candidate_ddar_error',
@@ -3107,6 +3198,23 @@ def parse_args() -> argparse.Namespace:
           'invalid_predicate'
       ),
       help='comma-separated invalid-construction reasons that feed adaptive type penalty',
+  )
+  parser.add_argument(
+      '--candidate_adaptive_type_penalty_ddar_errors',
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help=(
+          'also feed selected candidate DDAR runtime errors, such as timeout, '
+          'into the adaptive construction-type penalty'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_adaptive_type_penalty_ddar_error_reasons',
+      default='timeout',
+      help=(
+          'comma-separated candidate DDAR error classes that feed adaptive '
+          'type penalty when --candidate_adaptive_type_penalty_ddar_errors is set'
+      ),
   )
   parser.add_argument(
       '--candidate_adaptive_type_preference_penalty',

@@ -32,6 +32,45 @@ def safe_name(name: str) -> str:
   return re.sub(r'[^A-Za-z0-9_.-]+', '_', name).strip('_') or 'problem'
 
 
+def load_candidate_seed_aux_file(path: str | None) -> dict[str, list[dict[str, Any]]]:
+  """Load known-good candidate targets that should be replayed for a problem."""
+  if not path:
+    return {}
+  seed_path = Path(path)
+  if not seed_path.exists():
+    raise FileNotFoundError(f'missing candidate seed aux file: {path}')
+  by_problem: dict[str, list[dict[str, Any]]] = {}
+  for line_no, line in enumerate(
+      seed_path.read_text(encoding='utf-8', errors='replace').splitlines(), 1
+  ):
+    if not line.strip():
+      continue
+    row = json.loads(line)
+    problem = (
+        row.get('problem')
+        or row.get('source_problem')
+        or row.get('name')
+        or row.get('problem_name')
+    )
+    raw = row.get('target') or row.get('raw') or row.get('candidate_target')
+    if not problem or not raw:
+      continue
+    try:
+      score = float(row.get('score', row.get('lm_score', 0.0)) or 0.0)
+    except (TypeError, ValueError):
+      score = 0.0
+    by_problem.setdefault(str(problem), []).append({
+        'raw': str(raw).strip(),
+        'score': score,
+        'translation': row.get('translation')
+        or row.get('candidate_translation')
+        or row.get('aux'),
+        'source': row.get('source') or row.get('source_events') or 'seed_aux_file',
+        'line_no': line_no,
+    })
+  return by_problem
+
+
 def build_graph_for_symbolic_search(gh: Any, p: Any, definitions: Any):
   """Build an AG graph while tolerating numeric goal-check bugs."""
   try:
@@ -740,6 +779,81 @@ def candidate_template_backfill_target(
   if extra_slots <= 0:
     return base_target
   return max(base_target, current_count + extra_slots)
+
+
+def add_candidate_seed_aux_records(
+    qs: Any,
+    events_file: str,
+    problem_name: str,
+    depth: int,
+    candidates: list[tuple[str, float]],
+    candidate_sources: dict[str, str],
+    seen_raw: set[str],
+    seen_generation_keys: set[str],
+    args: argparse.Namespace,
+) -> None:
+  seed_records = getattr(args, '_candidate_seed_aux_by_problem', {}).get(
+      problem_name, []
+  )
+  if not seed_records:
+    return
+  limit = max(0, int(getattr(args, 'candidate_seed_aux_limit', 0) or 0))
+  if limit <= 0:
+    return
+  added = 0
+  for seed in seed_records:
+    raw = str(seed.get('raw') or '').strip()
+    if not raw:
+      continue
+    generation_key = qs.candidate_generation_dedup_key(raw)
+    if raw in seen_raw or generation_key in seen_generation_keys:
+      qs.event(
+          events_file,
+          kind='candidate_seed_aux_filtered',
+          depth=depth,
+          raw=raw,
+          reason='duplicate_generation',
+          seed_source=seed.get('source'),
+          seed_line_no=seed.get('line_no'),
+      )
+      continue
+    candidates.append((raw, float(seed.get('score') or 0.0)))
+    seen_raw.add(raw)
+    seen_generation_keys.add(generation_key)
+    candidate_sources[raw] = 'seed_aux_file'
+    added += 1
+    qs.event(
+        events_file,
+        kind='candidate_seed_aux_added',
+        depth=depth,
+        raw=raw,
+        seed_translation=seed.get('translation'),
+        seed_source=seed.get('source'),
+        seed_line_no=seed.get('line_no'),
+        candidate_seed_aux_limit=limit,
+    )
+    if added >= limit:
+      break
+
+
+def frontfill_seed_aux_records(
+    records: list[dict[str, Any]], args: argparse.Namespace
+) -> list[dict[str, Any]]:
+  limit = max(0, int(getattr(args, 'candidate_seed_aux_frontfill_limit', 0) or 0))
+  if limit <= 0 or not records:
+    return records
+  seed_records = [
+      record
+      for record in records
+      if str(record.get('source') or '').startswith('seed_aux_file')
+  ]
+  if not seed_records:
+    return records
+  selected_ids = {id(record) for record in seed_records[:limit]}
+  return (
+      [record for record in records if id(record) in selected_ids]
+      + [record for record in records if id(record) not in selected_ids]
+  )
 
 
 def select_depth_candidates_for_eval(
@@ -1537,6 +1651,17 @@ def solve_one(
         seen_generation_keys = {
             qs.candidate_generation_dedup_key(raw) for raw, _ in candidates
         }
+        add_candidate_seed_aux_records(
+            qs,
+            events_file,
+            p.url,
+            depth,
+            candidates,
+            candidate_sources,
+            seen_raw,
+            seen_generation_keys,
+            args,
+        )
         # Dedup within this proof state; pruned auxes may still help other branches.
         seen_candidate_keys: set[str] = set()
         if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
@@ -1652,6 +1777,9 @@ def solve_one(
             args,
             depth,
             'node',
+        )
+        ranked_node_candidates = frontfill_seed_aux_records(
+            ranked_node_candidates, args
         )
         if args.candidate_eval_limit and args.candidate_eval_limit > 0:
           for record in ranked_node_candidates[args.candidate_eval_limit:]:
@@ -2233,6 +2361,17 @@ def solve_one(
       seen_generation_keys = {
           qs.candidate_generation_dedup_key(raw) for raw, _ in candidates
       }
+      add_candidate_seed_aux_records(
+          qs,
+          events_file,
+          p.url,
+          depth,
+          candidates,
+          candidate_sources,
+          seen_raw,
+          seen_generation_keys,
+          args,
+      )
       # Dedup within this proof state; pruned auxes may still help other branches.
       seen_candidate_keys: set[str] = set()
       if args.candidate_template_backfill and len(candidates) < args.num_return_sequences:
@@ -2350,6 +2489,7 @@ def solve_one(
           depth,
           'node',
       )
+      ranked_candidates = frontfill_seed_aux_records(ranked_candidates, args)
       if args.candidate_eval_limit and args.candidate_eval_limit > 0:
         for record in ranked_candidates[args.candidate_eval_limit:]:
           qs.event(
@@ -3042,6 +3182,25 @@ def parse_args() -> argparse.Namespace:
       ),
   )
   parser.add_argument(
+      '--candidate_seed_aux_file',
+      help=(
+          'optional JSONL with known-good auxiliary targets to replay as '
+          'candidate records; rows need problem and target/raw fields'
+      ),
+  )
+  parser.add_argument(
+      '--candidate_seed_aux_limit',
+      type=int,
+      default=8,
+      help='maximum seed aux candidates injected per matching problem and beam node',
+  )
+  parser.add_argument(
+      '--candidate_seed_aux_frontfill_limit',
+      type=int,
+      default=8,
+      help='number of seed aux candidates to keep at the front after reranking',
+  )
+  parser.add_argument(
       '--candidate_timeout_beam_fallback_limit',
       type=int,
       default=0,
@@ -3261,6 +3420,9 @@ def main() -> None:
       args._candidate_static_progress_type_bonus_by_problem,
   ) = (
       load_candidate_static_progress_type_bonus(args.candidate_static_progress_type_bonus)
+  )
+  args._candidate_seed_aux_by_problem = load_candidate_seed_aux_file(
+      args.candidate_seed_aux_file
   )
 
   problems = pr.Problem.from_txt_file(

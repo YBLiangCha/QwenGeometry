@@ -16,6 +16,7 @@ REFERENCE_PROCESS_PATTERN=${REFERENCE_PROCESS_PATTERN:-run_qwen_ag_benchmark.py.
 REFERENCE_EXPECTED_ROWS=${REFERENCE_EXPECTED_ROWS:-16}
 REFERENCE_MIN_ROWS=${REFERENCE_MIN_ROWS:-1}
 REFERENCE_ALLOW_INCOMPLETE=${REFERENCE_ALLOW_INCOMPLETE:-0}
+EXTRA_SIGNAL_EVENTS_DIRS=${EXTRA_SIGNAL_EVENTS_DIRS:-}
 
 WAIT_FOR_SCOUT=${WAIT_FOR_SCOUT:-1}
 SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT=${SCOUT_TIMEOUT_BEAM_FALLBACK_LIMIT:-2}
@@ -32,6 +33,10 @@ DRY_RUN=${DRY_RUN:-0}
 POSTRUN_TAG=${POSTRUN_TAG:-postv12_solvedbiased_hybrid_v64prompt_component_feedback_v1}
 QUEUE_LOG=${QUEUE_LOG:-outputs/${POSTRUN_TAG}.queue.log}
 SFT_OUT=${SFT_OUT:-outputs/stage4_candidate_signal_solvedbiased_after_v12_${POSTRUN_TAG}}
+STAGE4_SHORT_REFERENCE_TAG=${STAGE4_SHORT_REFERENCE_TAG:-v12clean}
+STAGE4_SHORT_POSTRUN_TAG=${STAGE4_SHORT_POSTRUN_TAG:-$POSTRUN_TAG}
+STAGE4_DATA_TAG=${STAGE4_DATA_TAG:-candidate_signals_${STAGE4_SHORT_REFERENCE_TAG}_${STAGE4_SHORT_POSTRUN_TAG}}
+STAGE4_SFT_TAG=${STAGE4_SFT_TAG:-candidate_signal_sft_${STAGE4_SHORT_REFERENCE_TAG}_${STAGE4_SHORT_POSTRUN_TAG}}
 BASE_ADAPTER=${BASE_ADAPTER:-outputs/stage3_candidate_signal_after_factctx_lora_qwen2_5_7b_candidate_signal_sft_unsolved_factctx_promptaug_top8_adapter_value_v5_grammar_semantic_v3_v1_postrun_value_v12_default_v1}
 
 PREFERRED_VALUE_MODEL=${PREFERRED_VALUE_MODEL:-outputs/candidate_value_model_v12_logistic_preddar_nodup_semantic_v3_partial7events6summary_v1/candidate_value_model.json}
@@ -232,6 +237,8 @@ log "hybrid clean LM fact context top-k: $CLEAN_LM_FACT_CONTEXT_TOP_K"
 log "hybrid clean value models: primary=$VALUE_MODEL; secondary=${CLEAN_SECONDARY_VALUE_MODEL:-none}"
 log "hybrid clean static progress type bonus: ${CLEAN_CANDIDATE_STATIC_PROGRESS_TYPE_BONUS:-none}"
 log "stage4 signal filters: min_delta=${STAGE4_SIGNAL_MIN_PROGRESS_DELTA}; max_elapsed=${STAGE4_SIGNAL_MAX_ELAPSED_SEC}; min_eff=${STAGE4_SIGNAL_MIN_PROGRESS_EFFICIENCY}; per_problem=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_PROBLEM}; per_type=${STAGE4_SIGNAL_MAX_PROGRESS_ROWS_PER_TYPE}; solved_repeat=${STAGE4_SIGNAL_SOLVED_REPEAT}"
+log "stage4 short tags: data=${STAGE4_DATA_TAG}; sft=${STAGE4_SFT_TAG}"
+log "stage4 extra signal events dirs: ${EXTRA_SIGNAL_EVENTS_DIRS:-none}"
 
 if [ "$DRY_RUN" = "1" ]; then
   log "dry run enabled; postrun script not launched"
@@ -246,6 +253,9 @@ env \
   OLD_SUMMARY_JSONL="$REFERENCE_SUMMARY_JSONL" \
   WAIT_FOR_OLD_BENCH=0 \
   POSTRUN_TAG="$POSTRUN_TAG" \
+  DATA_TAG="$STAGE4_DATA_TAG" \
+  SFT_TAG="$STAGE4_SFT_TAG" \
+  EXTRA_SIGNAL_EVENTS_DIRS="$EXTRA_SIGNAL_EVENTS_DIRS" \
   BASE_ADAPTER="$BASE_ADAPTER" \
   SIGNAL_MIN_PROGRESS_DELTA="$STAGE4_SIGNAL_MIN_PROGRESS_DELTA" \
   SIGNAL_MAX_ELAPSED_SEC="$STAGE4_SIGNAL_MAX_ELAPSED_SEC" \

@@ -12,6 +12,7 @@ OLD_OUT_DIR=${OLD_OUT_DIR:-outputs/final_eval_imo_ag30_qwen_${OLD_TAG}}
 OLD_EVENTS_DIR=${OLD_EVENTS_DIR:-$OLD_OUT_DIR/events}
 OLD_SUMMARY_JSONL=${OLD_SUMMARY_JSONL:-$OLD_OUT_DIR/summary.jsonl}
 BASELINE_SUMMARY_JSONL=${BASELINE_SUMMARY_JSONL:-outputs/final_eval_imo_ag30_qwen_unsolved_high_budget_value_v3_cost_template_depth16_v1/summary.jsonl}
+EXTRA_SIGNAL_EVENTS_DIRS=${EXTRA_SIGNAL_EVENTS_DIRS:-}
 
 WAIT_FOR_OLD_BENCH=${WAIT_FOR_OLD_BENCH:-1}
 WAIT_INTERVAL=${WAIT_INTERVAL:-300}
@@ -113,6 +114,21 @@ log() {
   printf ' %s\n' "$*" | tee -a "$LOG"
 }
 
+EXTRA_SIGNAL_EVENTS_ARGS=()
+if [ -n "$EXTRA_SIGNAL_EVENTS_DIRS" ]; then
+  IFS=',' read -r -a _extra_signal_events_dirs <<< "$EXTRA_SIGNAL_EVENTS_DIRS"
+  for extra_signal_events_dir in "${_extra_signal_events_dirs[@]}"; do
+    if [ -z "$extra_signal_events_dir" ]; then
+      continue
+    fi
+    if [ ! -d "$extra_signal_events_dir" ]; then
+      echo "missing EXTRA_SIGNAL_EVENTS_DIRS entry: $extra_signal_events_dir" | tee -a "$LOG" >&2
+      exit 1
+    fi
+    EXTRA_SIGNAL_EVENTS_ARGS+=(--extra_events_dir "$extra_signal_events_dir")
+  done
+fi
+
 if [ "$WAIT_FOR_OLD_BENCH" = "1" ]; then
   log "waiting for old benchmark to exit: $OLD_TAG"
   while pgrep -f "run_qwen_ag_benchmark.py.*${OLD_TAG}" >/dev/null; do
@@ -122,6 +138,7 @@ if [ "$WAIT_FOR_OLD_BENCH" = "1" ]; then
 fi
 
 log "old benchmark no longer active; building postrun artifacts"
+log "extra signal events dirs: ${EXTRA_SIGNAL_EVENTS_DIRS:-none}"
 if [ ! -d "$OLD_EVENTS_DIR" ]; then
   echo "missing events dir: $OLD_EVENTS_DIR" | tee -a "$LOG" >&2
   exit 1
@@ -142,6 +159,7 @@ python -u "$SCRIPT_DIR/report_qwen_ag_analysis.py" \
 
 python -u "$SCRIPT_DIR/build_aux_sft_from_candidate_signals.py" \
   --events_dir "$OLD_EVENTS_DIR" \
+  "${EXTRA_SIGNAL_EVENTS_ARGS[@]}" \
   --train_file "$SIGNAL_TRAIN" \
   --eval_file "$SIGNAL_EVAL" \
   --summary_file "$SIGNAL_SUMMARY" \

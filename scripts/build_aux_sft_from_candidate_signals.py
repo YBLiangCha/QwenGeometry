@@ -52,9 +52,22 @@ def iter_events(events_dir: Path):
       yield path, line_no, event
 
 
+def iter_event_sources(events_dir: Path, extra_events_dirs: list[str]):
+  yield None, events_dir
+  for index, extra_events_dir in enumerate(extra_events_dirs):
+    extra_path = Path(extra_events_dir)
+    yield f'extra{index}:{safe_name(extra_path.name)}', extra_path
+
+
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser()
   parser.add_argument('--events_dir', required=True)
+  parser.add_argument(
+      '--extra_events_dir',
+      action='append',
+      default=[],
+      help='additional benchmark events directories to mine, e.g. solved scout runs',
+  )
   parser.add_argument('--train_file', required=True)
   parser.add_argument('--eval_file', required=True)
   parser.add_argument('--summary_file', required=True)
@@ -138,13 +151,19 @@ def keep_event(event: dict[str, Any], args: argparse.Namespace) -> bool:
   return True
 
 
-def row_from_event(event: dict[str, Any], path: Path, line_no: int) -> dict[str, Any]:
+def row_from_event(
+    event: dict[str, Any], path: Path, line_no: int, source_label: str | None = None
+) -> dict[str, Any]:
   problem = event.get('problem') or path.stem
+  row_id = f'{safe_name(problem)}::{path.stem}::{line_no}'
+  if source_label:
+    row_id = f'{safe_name(problem)}::{source_label}::{path.stem}::{line_no}'
   prompt = str(event.get('prompt') or '').rstrip()
   target = str(event.get('target') or '').strip()
   return {
-      'id': f'{safe_name(problem)}::{path.stem}::{line_no}',
+      'id': row_id,
       'source_problem': problem,
+      'source_events': source_label or 'primary',
       'prompt': prompt,
       'target': target,
       'candidate_translation': event.get('translation'),
@@ -217,32 +236,50 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 def main() -> None:
   args = parse_args()
   events_dir = Path(args.events_dir)
+  extra_events_dirs = list(args.extra_events_dir or [])
   train_file = Path(args.train_file)
   eval_file = Path(args.eval_file)
   summary_file = Path(args.summary_file)
   rows = []
   seen: set[tuple[str, str]] = set()
   counts: dict[str, int] = {}
-  for path, line_no, event in iter_events(events_dir):
-    if event.get('kind') != 'candidate_sft_signal':
+  for source_label, source_events_dir in iter_event_sources(events_dir, extra_events_dirs):
+    if not source_events_dir.exists():
+      counts[f'missing_events_dir:{source_label or "primary"}'] = (
+          counts.get(f'missing_events_dir:{source_label or "primary"}', 0) + 1
+      )
       continue
-    counts['signals_seen'] = counts.get('signals_seen', 0) + 1
-    if not keep_event(event, args):
-      counts['signals_skipped'] = counts.get('signals_skipped', 0) + 1
-      continue
-    row = row_from_event(event, path, line_no)
-    if not row['prompt'] or not row['target']:
-      counts['missing_prompt_or_target'] = counts.get('missing_prompt_or_target', 0) + 1
-      continue
-    key = (row['prompt'], row['target'])
-    if key in seen:
-      counts['duplicate_prompt_target'] = counts.get('duplicate_prompt_target', 0) + 1
-      continue
-    seen.add(key)
-    rows.append(row)
-    counts[f"kept_before_cap:{row['verdict']}"] = (
-        counts.get(f"kept_before_cap:{row['verdict']}", 0) + 1
-    )
+    source_key = source_label or 'primary'
+    for path, line_no, event in iter_events(source_events_dir):
+      if event.get('kind') != 'candidate_sft_signal':
+        continue
+      counts['signals_seen'] = counts.get('signals_seen', 0) + 1
+      counts[f'signals_seen:{source_key}'] = counts.get(f'signals_seen:{source_key}', 0) + 1
+      if not keep_event(event, args):
+        counts['signals_skipped'] = counts.get('signals_skipped', 0) + 1
+        counts[f'signals_skipped:{source_key}'] = (
+            counts.get(f'signals_skipped:{source_key}', 0) + 1
+        )
+        continue
+      row = row_from_event(event, path, line_no, source_label=source_label)
+      if not row['prompt'] or not row['target']:
+        counts['missing_prompt_or_target'] = counts.get('missing_prompt_or_target', 0) + 1
+        continue
+      key = (row['prompt'], row['target'])
+      if key in seen:
+        counts['duplicate_prompt_target'] = counts.get('duplicate_prompt_target', 0) + 1
+        counts[f'duplicate_prompt_target:{source_key}'] = (
+            counts.get(f'duplicate_prompt_target:{source_key}', 0) + 1
+        )
+        continue
+      seen.add(key)
+      rows.append(row)
+      counts[f"kept_before_cap:{row['verdict']}"] = (
+          counts.get(f"kept_before_cap:{row['verdict']}", 0) + 1
+      )
+      counts[f"kept_before_cap:{source_key}:{row['verdict']}"] = (
+          counts.get(f"kept_before_cap:{source_key}:{row['verdict']}", 0) + 1
+      )
   rows_before_cap = len(rows)
   rows = select_rows(rows, args)
   for row in rows:
@@ -258,6 +295,7 @@ def main() -> None:
   write_jsonl(eval_file, eval_rows)
   summary = {
       'events_dir': str(events_dir),
+      'extra_events_dirs': extra_events_dirs,
       'train_file': str(train_file),
       'eval_file': str(eval_file),
       'rows': len(rows),

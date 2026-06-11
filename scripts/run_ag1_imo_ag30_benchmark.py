@@ -16,6 +16,7 @@ import shutil
 import sys
 import time
 import traceback
+import types
 from concurrent import futures
 from typing import Any
 
@@ -50,6 +51,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--beam_size", type=int, default=512)
   parser.add_argument("--search_depth", type=int, default=16)
   parser.add_argument("--sequence_length", type=int, default=128)
+  parser.add_argument("--model_dtype", choices=["float32", "bfloat16"], default="float32")
   parser.add_argument("--workers", type=int, default=max(1, os.cpu_count() or 1))
   parser.add_argument("--problem", action="append", default=None)
   parser.add_argument("--skip_ddar_prefilter", action="store_true")
@@ -81,6 +83,15 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--root_fact_max_level", type=int, default=1000)
   parser.add_argument("--root_fact_timeout", type=int, default=600)
   return parser.parse_args()
+
+
+def install_jax_compat_shims(jax_module: Any) -> None:
+  if not hasattr(jax_module.core, "Shape"):
+    jax_module.core.Shape = tuple[int, ...]
+  if not hasattr(jax_module, "xla"):
+    jax_module.xla = types.SimpleNamespace()
+  if not hasattr(jax_module.xla, "DeviceArray") and hasattr(jax_module, "Array"):
+    jax_module.xla.DeviceArray = jax_module.Array
 
 
 def ensure_absl_flags_parsed() -> None:
@@ -169,6 +180,7 @@ def submit_ddar(
 
 def load_lm(args: argparse.Namespace):
   import jax
+  install_jax_compat_shims(jax)
   import lm_inference
 
   gin_paths = [
@@ -176,6 +188,7 @@ def load_lm(args: argparse.Namespace):
       str(Path.cwd()),
   ]
   gin_params = [
+      f'DTYPE="{args.model_dtype}"',
       "DecoderOnlyLanguageModelGenerate.output_token_losses=True",
       f"TransformerTaskConfig.batch_size={args.batch_size}",
       f"TransformerTaskConfig.sequence_length={args.sequence_length}",
@@ -239,10 +252,12 @@ def problem_type_bonus(
 
 
 def candidate_records(outputs: dict[str, Any], graph: gh.Graph) -> list[dict[str, Any]]:
-  translations = [
-      ag.try_translate_constrained_to_construct(o, graph)
-      for o in outputs["seqs_str"]
-  ]
+  translations = []
+  for output in outputs["seqs_str"]:
+    try:
+      translations.append(ag.try_translate_constrained_to_construct(output, graph))
+    except Exception as exc:  # pylint: disable=broad-except
+      translations.append(f"ERROR: translate_exception: {exc!r}")
   records = []
   for rank, (lm_out, translation, score) in enumerate(
       reversed(list(zip(outputs["seqs_str"], translations, outputs["scores"])))

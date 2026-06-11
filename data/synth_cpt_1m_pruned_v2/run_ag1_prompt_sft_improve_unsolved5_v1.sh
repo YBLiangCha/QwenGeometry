@@ -5,6 +5,7 @@ QWEN_WORK=${QWEN_WORK:-/root/rivermind-data/qwen_ag_lm}
 AG_ROOT=${AG_ROOT:-/root/alphageometry_repro}
 AG_DIR=${AG_DIR:-$AG_ROOT/alphageometry_clean}
 AG_VENV=${AG_VENV:-$AG_ROOT/venv}
+AG_JAX_OVERLAY=${AG_JAX_OVERLAY:-$AG_ROOT/jax_cuda12_overlay_v0438}
 
 TAG=${TAG:-ag1_prompt_sft_fact_value_unsolved5_v1}
 SFT_WORKDIR=${SFT_WORKDIR:-$AG_ROOT/${TAG}_ckpt}
@@ -39,6 +40,7 @@ AG_SEARCH_DEPTH=${AG_SEARCH_DEPTH:-16}
 AG_WORKERS=${AG_WORKERS:-96}
 AG_PROBLEM_TIME_LIMIT_SEC=${AG_PROBLEM_TIME_LIMIT_SEC:-5400}
 AG_FACT_TOP_K=${AG_FACT_TOP_K:-12}
+AG_MODEL_DTYPE=${AG_MODEL_DTYPE:-float32}
 
 mkdir -p "$(dirname "$LOG")"
 
@@ -61,6 +63,7 @@ for path in \
   "$AG_DIR/ag_ckpt_vocab/checkpoint_10999999" \
   "$AG_DIR/run_imo_ag30_value_rerank_benchmark.py" \
   "$QWEN_WORK/scripts/train_ag1_prompt_sft.py" \
+  "$QWEN_WORK/scripts/patch_ag1_lm_inference_dtype.py" \
   "$TRAIN_FILE_1" "$TRAIN_FILE_2" "$TRAIN_FILE_3" \
   "$EVAL_FILE_1" "$EVAL_FILE_2" "$EVAL_FILE_3" \
   "$VALUE_MODEL" "$SECONDARY_VALUE_MODEL" "$STATIC_TYPE_BONUS"; do
@@ -74,12 +77,35 @@ cd "$AG_DIR"
 . "$AG_VENV/bin/activate"
 
 MELIAD_PATH="$AG_DIR/meliad_lib/meliad"
-export PYTHONPATH="$MELIAD_PATH:$QWEN_WORK/scripts:${PYTHONPATH:-}"
+if [ -d "$AG_JAX_OVERLAY" ]; then
+  AG_JAX_LIB_PATH=$(find "$AG_JAX_OVERLAY/nvidia" -type d -name lib 2>/dev/null | paste -sd: -)
+  export PYTHONPATH="$AG_JAX_OVERLAY:$MELIAD_PATH:$QWEN_WORK/scripts:${PYTHONPATH:-}"
+  if [ -n "$AG_JAX_LIB_PATH" ]; then
+    export LD_LIBRARY_PATH="$AG_JAX_LIB_PATH${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  fi
+  log "using AG1 JAX overlay: $AG_JAX_OVERLAY"
+else
+  export PYTHONPATH="$MELIAD_PATH:$QWEN_WORK/scripts:${PYTHONPATH:-}"
+  log "AG1 JAX overlay not found, using venv JAX: $AG_JAX_OVERLAY"
+fi
 export TF_CPP_MIN_LOG_LEVEL=${TF_CPP_MIN_LOG_LEVEL:-1}
 export XLA_PYTHON_CLIENT_PREALLOCATE=${XLA_PYTHON_CLIENT_PREALLOCATE:-false}
 
-if [ -z "$(find "$SFT_WORKDIR" -maxdepth 1 -name 'checkpoint_*' -print -quit 2>/dev/null || true)" ]; then
+python "$QWEN_WORK/scripts/patch_ag1_lm_inference_dtype.py" --ag_dir "$AG_DIR" \
+  2>&1 | tee -a "$LOG"
+
+LATEST_SFT_STEP=$(
+  (find "$SFT_WORKDIR" -maxdepth 1 -name 'checkpoint_*' -printf '%f\n' 2>/dev/null || true) \
+    | sed 's/^checkpoint_//' \
+    | sort -n \
+    | tail -1
+)
+LATEST_SFT_STEP=${LATEST_SFT_STEP:-"-1"}
+TARGET_SFT_STEP=$((TRAIN_STEPS - 1))
+
+if [ "$LATEST_SFT_STEP" -lt "$TARGET_SFT_STEP" ]; then
   log "starting AG1 prompt SFT workdir=$SFT_WORKDIR"
+  log "SFT resume state: latest_step=$LATEST_SFT_STEP target_step=$TARGET_SFT_STEP"
   python "$QWEN_WORK/scripts/train_ag1_prompt_sft.py" \
     --train_file "$TRAIN_FILE_1" \
     --train_file "$TRAIN_FILE_2" \
@@ -94,16 +120,32 @@ if [ -z "$(find "$SFT_WORKDIR" -maxdepth 1 -name 'checkpoint_*' -print -quit 2>/
     --num_steps "$TRAIN_STEPS" \
     --batch_size "$TRAIN_BATCH_SIZE" \
     --sequence_length "$TRAIN_SEQUENCE_LENGTH" \
+    --model_dtype "$AG_MODEL_DTYPE" \
     --learning_rate_multiplier "$TRAIN_LR_MULT" \
     --warmup_steps "$TRAIN_WARMUP_STEPS" \
     --checkpoint_every_steps "$TRAIN_CHECKPOINT_EVERY" \
     2>&1 | tee -a "$LOG"
 else
-  log "SFT checkpoint already exists, skipping training: $SFT_WORKDIR"
+  log "SFT checkpoint already complete, skipping training: $SFT_WORKDIR latest_step=$LATEST_SFT_STEP"
 fi
 
+RESULTS_COMPLETE=0
 if [ -e "$RESULTS_DIR/summary.json" ]; then
-  log "results already exist: $RESULTS_DIR/summary.json"
+  RESULTS_COMPLETE=$(
+    python - "$RESULTS_DIR/summary.json" <<'PY'
+import json
+import sys
+path = sys.argv[1]
+try:
+  data = json.load(open(path, encoding="utf-8"))
+  print(int(data.get("total_finished", 0) >= data.get("total_requested", 1)))
+except Exception:
+  print(0)
+PY
+  )
+fi
+if [ "$RESULTS_COMPLETE" -eq 1 ]; then
+  log "results already complete: $RESULTS_DIR/summary.json"
   exit 0
 fi
 
@@ -130,6 +172,7 @@ python run_imo_ag30_value_rerank_benchmark.py \
   --batch_size="$AG_BATCH_SIZE" \
   --beam_size="$AG_BEAM_SIZE" \
   --search_depth="$AG_SEARCH_DEPTH" \
+  --model_dtype="$AG_MODEL_DTYPE" \
   --workers="$AG_WORKERS" \
   --skip_ddar_prefilter \
   --skip_initial_ddar \

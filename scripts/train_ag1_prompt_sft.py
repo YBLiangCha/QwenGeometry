@@ -14,6 +14,7 @@ import json
 import random
 from pathlib import Path
 import sys
+import types
 from typing import Any, Iterable
 
 import numpy as np
@@ -27,6 +28,16 @@ GIN_FILES = [
     "options/seq_1024_nocache.gin",
     "geometry_150M_generate.gin",
 ]
+
+
+def install_jax_compat_shims(jax_module: Any) -> None:
+  """Patch tiny API aliases needed by AG1's older optax/chex stack."""
+  if not hasattr(jax_module.core, "Shape"):
+    jax_module.core.Shape = tuple[int, ...]
+  if not hasattr(jax_module, "xla"):
+    jax_module.xla = types.SimpleNamespace()
+  if not hasattr(jax_module.xla, "DeviceArray") and hasattr(jax_module, "Array"):
+    jax_module.xla.DeviceArray = jax_module.Array
 
 
 def parse_args() -> argparse.Namespace:
@@ -48,6 +59,7 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--log_every_steps", type=int, default=10)
   parser.add_argument("--test_every_steps", type=int, default=100)
   parser.add_argument("--num_test_steps", type=int, default=10)
+  parser.add_argument("--model_dtype", choices=["float32", "bfloat16"], default="float32")
   parser.add_argument("--seed", type=int, default=1234)
   return parser.parse_args()
 
@@ -158,12 +170,42 @@ def batch_iterator(
     epoch += 1
 
 
+def create_prompt_sft_trainer_class(training_loop: Any):
+  class PromptSftTrainer(training_loop.Trainer):
+    """Trainer that initializes from AG1 params while starting SFT at step 0."""
+
+    def restore_checkpoint(self, train_state: Any) -> Any:
+      workdir_has_checkpoint = False
+      if self.workdir and training_loop.gfile.exists(self.workdir):
+        ckpath = training_loop.checkpoints.latest_checkpoint(
+            self.workdir, "checkpoint_"
+        )
+        workdir_has_checkpoint = bool(ckpath)
+      if workdir_has_checkpoint:
+        return super().restore_checkpoint(train_state)
+      if not self.load_dir:
+        return train_state
+
+      loaded = training_loop.checkpoints.restore_checkpoint(
+          self.load_dir, train_state
+      )
+      source_step = int(loaded.optimizer.state.step)
+      self.post_load_checkpoint_fn(self.load_dir, source_step)
+      fresh_optimizer = train_state.optimizer.optimizer_def.create(
+          loaded.optimizer.target
+      )
+      return training_loop.TrainState(fresh_optimizer, train_state.state)
+
+  return PromptSftTrainer
+
+
 def main() -> int:
   args = parse_args()
   sys.path.insert(0, str(Path(args.meliad_path).resolve()))
 
   import gin  # pylint: disable=import-error,import-outside-toplevel
   import jax  # pylint: disable=import-error,import-outside-toplevel
+  install_jax_compat_shims(jax)
   import t5.data  # pylint: disable=import-error,import-outside-toplevel
   import decoder_stack as ag_decoder_stack  # pylint: disable=import-error,import-outside-toplevel
   import lm_inference  # pylint: disable=import-error,import-outside-toplevel
@@ -177,6 +219,7 @@ def main() -> int:
       str(Path.cwd()),
   ]
   gin_params = [
+      f'DTYPE="{args.model_dtype}"',
       f"TransformerTaskConfig.batch_size={args.batch_size}",
       f"TransformerTaskConfig.sequence_length={args.sequence_length}",
       "Trainer.restore_state_variables=False",
@@ -215,19 +258,22 @@ def main() -> int:
       "num_steps": args.num_steps,
       "batch_size": args.batch_size,
       "sequence_length": args.sequence_length,
+      "model_dtype": args.model_dtype,
       "learning_rate_multiplier": args.learning_rate_multiplier,
       "warmup_steps": args.warmup_steps,
       "train_stats": train_stats,
       "eval_stats": eval_stats,
       "jax_backend": jax.default_backend(),
       "jax_devices": [str(d) for d in jax.devices()],
+      "restore_mode": "params_only_reset_optimizer_step",
   }
   (workdir / "prompt_sft_metadata.json").write_text(
       json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
   )
   print(json.dumps(metadata, ensure_ascii=False, indent=2))
 
-  trainer = training_loop.Trainer(
+  trainer_cls = create_prompt_sft_trainer_class(training_loop)
+  trainer = trainer_cls(
       model_definition=model_definition,
       get_training_dataset_iterator=lambda: batch_iterator(
           train_examples, args.batch_size, args.seed

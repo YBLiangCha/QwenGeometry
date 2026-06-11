@@ -282,6 +282,14 @@ def run_ddar_worker_subprocess(
   log_path.parent.mkdir(parents=True, exist_ok=True)
   spec_path = log_path.parent / "ddar_worker_spec.json"
   result_path = log_path.parent / "ddar_worker_result.json"
+  if result_path.exists():
+    try:
+      result = json.loads(result_path.read_text(encoding="utf-8"))
+      result["elapsed_sec"] = time.time() - start
+      return result
+    except Exception:
+      pass
+
   spec = {
       "problem_name": problem_name,
       "pstring": pstring,

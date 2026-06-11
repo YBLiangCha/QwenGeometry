@@ -77,6 +77,9 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--candidate_secondary_value_model", default="")
   parser.add_argument("--candidate_frontfill_limit", type=int, default=8)
   parser.add_argument("--candidate_static_progress_type_bonus", default="")
+  parser.add_argument("--lm_fact_context_top_k", type=int, default=0)
+  parser.add_argument("--root_fact_max_level", type=int, default=1000)
+  parser.add_argument("--root_fact_timeout", type=int, default=600)
   return parser.parse_args()
 
 
@@ -194,7 +197,7 @@ def load_lm(args: argparse.Namespace):
 
 
 def load_qwen_search(args: argparse.Namespace):
-  if args.candidate_rerank == "none":
+  if args.candidate_rerank == "none" and args.lm_fact_context_top_k <= 0:
     return None
   if args.qwen_search_path:
     sys.path.insert(0, str(Path(args.qwen_search_path).resolve()))
@@ -278,6 +281,44 @@ def run_ag_problem(
 
   string = problem.setup_str_from_problem(ag.DEFINITIONS) + " {F1} x00"
   g, _ = gh.Graph.build_problem(problem, ag.DEFINITIONS)
+  qs = getattr(args, "_qwen_search", None)
+  if qs is not None and args.lm_fact_context_top_k > 0:
+    try:
+      root_fact = qs.run_ddar_once(
+          g,
+          problem,
+          getattr(args, "_ag_ddar"),
+          gh,
+          args.root_fact_max_level,
+          args.root_fact_timeout,
+          str(events_path),
+          "ag1_root_fact_context",
+          args.lm_fact_context_top_k,
+      )
+      facts = list(root_fact.get("fact_context") or [])
+      if facts:
+        string = qs.build_lm_prompt(problem, ag.DEFINITIONS, facts)
+      write_jsonl(
+          events_path,
+          {
+              "event": "ag1_fact_context",
+              "problem": name,
+              "fact_context_count": len(facts),
+              "facts": facts,
+              "root_fact_solved": root_fact.get("solved"),
+              "root_fact_status": root_fact.get("status"),
+          },
+      )
+    except Exception as exc:  # pylint: disable=broad-except
+      write_jsonl(
+          events_path,
+          {
+              "event": "ag1_fact_context_error",
+              "problem": name,
+              "error": repr(exc),
+              "traceback": traceback.format_exc(),
+          },
+      )
 
   if run_initial_ddar:
     initial_ddar = submit_ddar(
@@ -366,7 +407,6 @@ def run_ag_problem(
             "pstring": candidate_pstring,
         })
 
-      qs = getattr(args, "_qwen_search", None)
       if qs is not None and valid:
         valid = qs.rerank_candidate_records(
             valid,
@@ -535,6 +575,14 @@ def main() -> int:
   ag.DEFINITIONS = pr.Definition.from_txt_file(args.defs_file, to_dict=True)
   ag.RULES = pr.Theorem.from_txt_file(args.rules_file, to_dict=True)
   args._qwen_search = load_qwen_search(args)
+  if args._qwen_search is not None:
+    import ddar as ag_ddar  # pylint: disable=import-error,import-outside-toplevel
+
+    args._ag_ddar = ag_ddar
+    args._qwen_search.DEFINITIONS = ag.DEFINITIONS
+    args._qwen_search.RULES = ag.RULES
+  else:
+    args._ag_ddar = None
   args._candidate_value_model = (
       args._qwen_search.load_candidate_value_model(args.candidate_value_model)
       if args._qwen_search is not None
@@ -573,6 +621,7 @@ def main() -> int:
           "candidate_value_model": args.candidate_value_model,
           "candidate_secondary_value_model": args.candidate_secondary_value_model,
           "candidate_static_progress_type_bonus": args.candidate_static_progress_type_bonus,
+          "lm_fact_context_top_k": args.lm_fact_context_top_k,
       },
   )
 

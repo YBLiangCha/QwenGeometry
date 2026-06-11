@@ -13,6 +13,7 @@ import math
 import multiprocessing as mp
 import os
 from pathlib import Path
+import signal
 import shutil
 import sys
 import time
@@ -149,6 +150,12 @@ def parse_args() -> argparse.Namespace:
       help="Maximum reranked candidates per construction type per beam node; 0 disables.",
   )
   parser.add_argument(
+      "--candidate_ddar_timeout_sec",
+      type=float,
+      default=0.0,
+      help="Per-candidate DDAR wall timeout inside worker; 0 disables.",
+  )
+  parser.add_argument(
       "--candidate_adaptive_type_penalty",
       action=argparse.BooleanOptionalAction,
       default=False,
@@ -219,6 +226,7 @@ def run_ddar_worker(
     out_file: str,
     log_file: str,
     keep_failed_log: bool,
+    timeout_sec: float = 0.0,
 ) -> dict[str, Any]:
   start = time.time()
   log_path = Path(log_file)
@@ -229,7 +237,20 @@ def run_ddar_worker(
     g, _ = gh.Graph.build_problem(p, ag.DEFINITIONS)
     with log_path.open("w", encoding="utf-8") as log:
       with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
-        solved = ag.run_ddar(g, p, out_file)
+        old_handler = None
+        if timeout_sec > 0 and hasattr(signal, "SIGALRM"):
+          def _timeout_handler(signum, frame):  # pylint: disable=unused-argument
+            raise TimeoutError(f"DDAR timed out after {timeout_sec:.1f}s")
+
+          old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+          signal.setitimer(signal.ITIMER_REAL, timeout_sec)
+        try:
+          solved = ag.run_ddar(g, p, out_file)
+        finally:
+          if timeout_sec > 0 and hasattr(signal, "SIGALRM"):
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            if old_handler is not None:
+              signal.signal(signal.SIGALRM, old_handler)
     if not solved and not keep_failed_log:
       with contextlib.suppress(FileNotFoundError):
         log_path.unlink()
@@ -262,6 +283,7 @@ def submit_ddar(
     out_file: Path,
     log_file: Path,
     keep_failed_log: bool,
+    timeout_sec: float = 0.0,
 ) -> futures.Future[dict[str, Any]]:
   return pool.submit(
       run_ddar_worker,
@@ -270,6 +292,7 @@ def submit_ddar(
       str(out_file),
       str(log_file),
       keep_failed_log,
+      timeout_sec,
   )
 
 
@@ -1000,6 +1023,7 @@ def run_ag_problem(
                 cand_dir / "proof.txt",
                 cand_dir / "ddar.log",
                 args.keep_failed_candidate_logs,
+                args.candidate_ddar_timeout_sec,
             ),
         })
 

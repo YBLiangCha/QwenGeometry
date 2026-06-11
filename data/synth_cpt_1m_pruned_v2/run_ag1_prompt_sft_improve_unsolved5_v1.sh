@@ -43,6 +43,8 @@ AG_FACT_TOP_K=${AG_FACT_TOP_K:-12}
 AG_MODEL_DTYPE=${AG_MODEL_DTYPE:-float32}
 AG_CANDIDATE_NODE_EVAL_LIMIT=${AG_CANDIDATE_NODE_EVAL_LIMIT:-48}
 AG_CANDIDATE_NODE_TYPE_EVAL_CAP=${AG_CANDIDATE_NODE_TYPE_EVAL_CAP:-6}
+AG_CANDIDATE_DDAR_TIMEOUT_SEC=${AG_CANDIDATE_DDAR_TIMEOUT_SEC:-240}
+AG_CANDIDATE_DEPTH_CANONICAL_DEDUP=${AG_CANDIDATE_DEPTH_CANONICAL_DEDUP:-0}
 AG_CANDIDATE_TEMPLATE_BACKFILL_EXTRA_SLOTS=${AG_CANDIDATE_TEMPLATE_BACKFILL_EXTRA_SLOTS:-32}
 AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_THRESHOLD=${AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_THRESHOLD:-4}
 AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_WEIGHT=${AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_WEIGHT:-0.55}
@@ -169,6 +171,11 @@ log "starting fine-tuned AG1-LM fact+value run tag=$TAG"
 log "problems=$PROBLEMS"
 log "results_dir=$RESULTS_DIR"
 
+DEDUP_ARGS=(--candidate_canonical_dedup)
+if [ "$AG_CANDIDATE_DEPTH_CANONICAL_DEDUP" = "1" ]; then
+  DEDUP_ARGS+=(--candidate_depth_canonical_dedup)
+fi
+
 python run_imo_ag30_value_rerank_benchmark.py \
   --problems_file="$AG_DIR/imo_ag_30.txt" \
   --defs_file="$AG_DIR/defs.txt" \
@@ -195,12 +202,12 @@ python run_imo_ag30_value_rerank_benchmark.py \
   --candidate_static_progress_type_bonus="$STATIC_TYPE_BONUS" \
   --candidate_point_repair \
   --candidate_point_mask \
-  --candidate_canonical_dedup \
-  --candidate_depth_canonical_dedup \
+  "${DEDUP_ARGS[@]}" \
   --candidate_template_backfill \
   --candidate_template_backfill_extra_slots="$AG_CANDIDATE_TEMPLATE_BACKFILL_EXTRA_SLOTS" \
   --candidate_node_eval_limit="$AG_CANDIDATE_NODE_EVAL_LIMIT" \
   --candidate_node_type_eval_cap="$AG_CANDIDATE_NODE_TYPE_EVAL_CAP" \
+  --candidate_ddar_timeout_sec="$AG_CANDIDATE_DDAR_TIMEOUT_SEC" \
   --candidate_adaptive_type_penalty \
   --candidate_adaptive_type_penalty_threshold="$AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_THRESHOLD" \
   --candidate_adaptive_type_penalty_weight="$AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_WEIGHT" \

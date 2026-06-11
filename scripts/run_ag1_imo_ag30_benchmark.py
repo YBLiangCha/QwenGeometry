@@ -28,6 +28,30 @@ import graph as gh
 import problem as pr
 
 
+class StableBeamQueue:
+  """Top-k queue that never compares graph/node payloads on score ties."""
+
+  def __init__(self, max_size: int = 512):
+    self.queue: list[tuple[float, object]] = []
+    self.max_size = max_size
+
+  def add(self, node: object, val: float) -> None:
+    if len(self.queue) < self.max_size:
+      self.queue.append((val, node))
+      return
+    min_idx, (min_val, _) = min(
+        enumerate(self.queue), key=lambda item: item[1][0]
+    )
+    if val > min_val:
+      self.queue[min_idx] = (val, node)
+
+  def __iter__(self):
+    yield from self.queue
+
+  def __len__(self) -> int:
+    return len(self.queue)
+
+
 GIN_FILES = [
     "base_htrans.gin",
     "size/medium_150M.gin",
@@ -366,7 +390,7 @@ def run_ag_problem(
         },
     )
 
-  beam_queue = ag.BeamQueue(max_size=args.beam_size)
+  beam_queue = StableBeamQueue(max_size=args.beam_size)
   beam_queue.add(node=(g, string, problem.txt()), val=0.0)
   lm_calls = 0
   candidates_checked = 0
@@ -384,7 +408,7 @@ def run_ag_problem(
             "elapsed_sec": time.time() - start,
         },
     )
-    new_queue = ag.BeamQueue(max_size=args.beam_size)
+    new_queue = StableBeamQueue(max_size=args.beam_size)
     pending_candidates = []
 
     for node_index, (prev_score, (g_prev, prompt, pstring)) in enumerate(beam_queue):
@@ -586,6 +610,7 @@ def main() -> int:
   events_path = results_dir / "events.jsonl"
   summary_path = results_dir / "summary.json"
   events_path.unlink(missing_ok=True)
+  summary_path.unlink(missing_ok=True)
 
   ag.DEFINITIONS = pr.Definition.from_txt_file(args.defs_file, to_dict=True)
   ag.RULES = pr.Theorem.from_txt_file(args.rules_file, to_dict=True)

@@ -41,6 +41,14 @@ AG_WORKERS=${AG_WORKERS:-96}
 AG_PROBLEM_TIME_LIMIT_SEC=${AG_PROBLEM_TIME_LIMIT_SEC:-5400}
 AG_FACT_TOP_K=${AG_FACT_TOP_K:-12}
 AG_MODEL_DTYPE=${AG_MODEL_DTYPE:-float32}
+AG_CANDIDATE_NODE_EVAL_LIMIT=${AG_CANDIDATE_NODE_EVAL_LIMIT:-48}
+AG_CANDIDATE_NODE_TYPE_EVAL_CAP=${AG_CANDIDATE_NODE_TYPE_EVAL_CAP:-6}
+AG_CANDIDATE_TEMPLATE_BACKFILL_EXTRA_SLOTS=${AG_CANDIDATE_TEMPLATE_BACKFILL_EXTRA_SLOTS:-32}
+AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_THRESHOLD=${AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_THRESHOLD:-4}
+AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_WEIGHT=${AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_WEIGHT:-0.55}
+AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_MAX=${AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_MAX:-3.0}
+AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_REASONS=${AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_REASONS:-point_too_close,point_too_far,point_already_exists,unknown_point,invalid_quad_solve,dep_check_fail,invalid_line_intersect,value_error,invalid_predicate}
+AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_DDAR_ERROR_REASONS=${AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_DDAR_ERROR_REASONS:-timeout,point_too_close,point_too_far,invalid_quad_solve,dep_check_fail}
 
 mkdir -p "$(dirname "$LOG")"
 
@@ -185,6 +193,21 @@ python run_imo_ag30_value_rerank_benchmark.py \
   --candidate_secondary_value_model="$SECONDARY_VALUE_MODEL" \
   --candidate_frontfill_limit=8 \
   --candidate_static_progress_type_bonus="$STATIC_TYPE_BONUS" \
+  --candidate_point_repair \
+  --candidate_point_mask \
+  --candidate_canonical_dedup \
+  --candidate_depth_canonical_dedup \
+  --candidate_template_backfill \
+  --candidate_template_backfill_extra_slots="$AG_CANDIDATE_TEMPLATE_BACKFILL_EXTRA_SLOTS" \
+  --candidate_node_eval_limit="$AG_CANDIDATE_NODE_EVAL_LIMIT" \
+  --candidate_node_type_eval_cap="$AG_CANDIDATE_NODE_TYPE_EVAL_CAP" \
+  --candidate_adaptive_type_penalty \
+  --candidate_adaptive_type_penalty_threshold="$AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_THRESHOLD" \
+  --candidate_adaptive_type_penalty_weight="$AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_WEIGHT" \
+  --candidate_adaptive_type_penalty_max="$AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_MAX" \
+  --candidate_adaptive_type_penalty_reasons="$AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_REASONS" \
+  --candidate_adaptive_type_penalty_ddar_errors \
+  --candidate_adaptive_type_penalty_ddar_error_reasons="$AG_CANDIDATE_ADAPTIVE_TYPE_PENALTY_DDAR_ERROR_REASONS" \
   "${PROBLEM_ARGS[@]}" \
   2>&1 | tee -a "$LOG"
 

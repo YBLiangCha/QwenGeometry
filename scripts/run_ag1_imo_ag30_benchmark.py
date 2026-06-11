@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import multiprocessing as mp
 import os
 from pathlib import Path
@@ -25,6 +26,7 @@ from absl import logging as absl_logging
 
 import alphageometry as ag
 import graph as gh
+import pretty as pt
 import problem as pr
 
 
@@ -103,6 +105,75 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--candidate_secondary_value_model", default="")
   parser.add_argument("--candidate_frontfill_limit", type=int, default=8)
   parser.add_argument("--candidate_static_progress_type_bonus", default="")
+  parser.add_argument(
+      "--candidate_point_mask",
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help="Filter candidates whose new point name already exists.",
+  )
+  parser.add_argument(
+      "--candidate_point_repair",
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help="Rename a generated existing new-point to the next free point.",
+  )
+  parser.add_argument(
+      "--candidate_canonical_dedup",
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help="Skip equivalent auxiliary clauses within a beam node.",
+  )
+  parser.add_argument(
+      "--candidate_depth_canonical_dedup",
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help="Skip equivalent auxiliary clauses already seen at the same depth.",
+  )
+  parser.add_argument(
+      "--candidate_template_backfill",
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help="Add type-diverse template candidates before reranking.",
+  )
+  parser.add_argument("--candidate_template_backfill_extra_slots", type=int, default=0)
+  parser.add_argument(
+      "--candidate_node_eval_limit",
+      type=int,
+      default=0,
+      help="Maximum reranked candidates evaluated per beam node; 0 disables.",
+  )
+  parser.add_argument(
+      "--candidate_node_type_eval_cap",
+      type=int,
+      default=0,
+      help="Maximum reranked candidates per construction type per beam node; 0 disables.",
+  )
+  parser.add_argument(
+      "--candidate_adaptive_type_penalty",
+      action=argparse.BooleanOptionalAction,
+      default=False,
+      help="Downrank construction types that repeatedly fail validation/DDAR.",
+  )
+  parser.add_argument("--candidate_adaptive_type_penalty_threshold", type=int, default=4)
+  parser.add_argument("--candidate_adaptive_type_penalty_weight", type=float, default=0.55)
+  parser.add_argument("--candidate_adaptive_type_penalty_max", type=float, default=3.0)
+  parser.add_argument(
+      "--candidate_adaptive_type_penalty_reasons",
+      default=(
+          "point_too_close,point_too_far,point_already_exists,unknown_point,"
+          "invalid_quad_solve,dep_check_fail,invalid_line_intersect,"
+          "value_error,invalid_predicate"
+      ),
+  )
+  parser.add_argument(
+      "--candidate_adaptive_type_penalty_ddar_errors",
+      action=argparse.BooleanOptionalAction,
+      default=False,
+  )
+  parser.add_argument(
+      "--candidate_adaptive_type_penalty_ddar_error_reasons",
+      default="timeout,point_too_close,point_too_far,invalid_quad_solve,dep_check_fail",
+  )
   parser.add_argument("--lm_fact_context_top_k", type=int, default=0)
   parser.add_argument("--root_fact_max_level", type=int, default=1000)
   parser.add_argument("--root_fact_timeout", type=int, default=600)
@@ -275,24 +346,356 @@ def problem_type_bonus(
   return merged
 
 
-def candidate_records(outputs: dict[str, Any], graph: gh.Graph) -> list[dict[str, Any]]:
-  translations = []
-  for output in outputs["seqs_str"]:
-    try:
-      translations.append(ag.try_translate_constrained_to_construct(output, graph))
-    except Exception as exc:  # pylint: disable=broad-except
-      translations.append(f"ERROR: translate_exception: {exc!r}")
-  records = []
-  for rank, (lm_out, translation, score) in enumerate(
-      reversed(list(zip(outputs["seqs_str"], translations, outputs["scores"])))
+def csv_arg_set(value: str | None) -> set[str]:
+  return {item.strip() for item in str(value or "").split(",") if item.strip()}
+
+
+def candidate_ddar_error_key(error: str | None) -> str:
+  lowered = str(error or "").lower()
+  if "timeout" in lowered:
+    return "timeout"
+  if "pointtoocloseerror" in lowered:
+    return "point_too_close"
+  if "pointtoofarerror" in lowered:
+    return "point_too_far"
+  if "depcheckfailerror" in lowered:
+    return "dep_check_fail"
+  if "invalidquadsolveerror" in lowered:
+    return "invalid_quad_solve"
+  if "invalid predicate" in lowered:
+    return "invalid_predicate"
+  if "does not exist" in lowered:
+    return "unknown_point"
+  return "other_error"
+
+
+def adaptive_type_penalty(
+    failures: int,
+    threshold: int,
+    weight: float,
+    max_penalty: float,
+) -> float:
+  if failures < threshold:
+    return 0.0
+  penalty = weight * math.log1p(failures - threshold + 1)
+  if max_penalty > 0:
+    penalty = min(max_penalty, penalty)
+  return max(0.0, penalty)
+
+
+def translate_candidate(raw: str, graph: gh.Graph, qs: Any | None) -> str:
+  if qs is not None:
+    return qs.try_translate_candidate(raw, graph, pr, pt)
+  try:
+    return ag.try_translate_constrained_to_construct(raw, graph)
+  except Exception as exc:  # pylint: disable=broad-except
+    return f"ERROR: translate_exception: {exc!r}"
+
+
+def candidate_type_key(record: dict[str, Any], qs: Any | None) -> str:
+  translation = str(record.get("translation") or "")
+  if qs is not None and not translation.startswith("ERROR:"):
+    return qs.construction_type_key(translation)
+  raw = str(record.get("raw") or record.get("lm_out") or "")
+  if qs is not None:
+    if hasattr(qs, "raw_candidate_construction_type_hint"):
+      return qs.raw_candidate_construction_type_hint(raw)
+    if raw and " = " in raw and hasattr(qs, "construction_type_key"):
+      return qs.construction_type_key(raw)
+  return "unknown"
+
+
+def note_adaptive_validation_failure(
+    *,
+    qs: Any | None,
+    events_path: Path,
+    adaptive_type_failures: dict[str, int],
+    args: argparse.Namespace,
+    problem: str,
+    depth: int,
+    node_index: int,
+    record: dict[str, Any],
+) -> None:
+  if qs is None or not args.candidate_adaptive_type_penalty:
+    return
+  reason = qs.candidate_value_error_key(str(record.get("translation") or ""))
+  if reason not in csv_arg_set(args.candidate_adaptive_type_penalty_reasons):
+    return
+  construction_type = candidate_type_key(record, qs)
+  if not construction_type or construction_type == "unknown":
+    return
+  failures = adaptive_type_failures.get(construction_type, 0) + 1
+  adaptive_type_failures[construction_type] = failures
+  threshold = max(1, int(args.candidate_adaptive_type_penalty_threshold))
+  if failures == threshold or (
+      failures > threshold and failures % max(threshold, 16) == 0
   ):
+    write_jsonl(
+        events_path,
+        {
+            "event": "candidate_adaptive_type_failure",
+            "problem": problem,
+            "depth": depth,
+            "node_index": node_index,
+            "raw": record.get("raw") or record.get("lm_out"),
+            "translation": record.get("translation"),
+            "reason": reason,
+            "source": record.get("source"),
+            "candidate_construction_type": construction_type,
+            "candidate_adaptive_type_failures": failures,
+            "candidate_adaptive_type_penalty_threshold": threshold,
+        },
+    )
+
+
+def note_adaptive_ddar_failure(
+    *,
+    qs: Any | None,
+    events_path: Path,
+    adaptive_type_failures: dict[str, int],
+    args: argparse.Namespace,
+    problem: str,
+    depth: int,
+    node_index: int,
+    record: dict[str, Any],
+    error: str | None,
+) -> None:
+  if (
+      qs is None
+      or not args.candidate_adaptive_type_penalty
+      or not args.candidate_adaptive_type_penalty_ddar_errors
+  ):
+    return
+  reason = candidate_ddar_error_key(error)
+  if reason not in csv_arg_set(args.candidate_adaptive_type_penalty_ddar_error_reasons):
+    return
+  construction_type = candidate_type_key(record, qs)
+  if not construction_type or construction_type == "unknown":
+    return
+  failures = adaptive_type_failures.get(construction_type, 0) + 1
+  adaptive_type_failures[construction_type] = failures
+  threshold = max(1, int(args.candidate_adaptive_type_penalty_threshold))
+  if failures == threshold or (
+      failures > threshold and failures % max(threshold, 16) == 0
+  ):
+    write_jsonl(
+        events_path,
+        {
+            "event": "candidate_adaptive_type_ddar_failure",
+            "problem": problem,
+            "depth": depth,
+            "node_index": node_index,
+            "raw": record.get("raw") or record.get("lm_out"),
+            "translation": record.get("translation"),
+            "error": error,
+            "reason": reason,
+            "source": record.get("source"),
+            "candidate_construction_type": construction_type,
+            "candidate_adaptive_type_failures": failures,
+            "candidate_adaptive_type_penalty_threshold": threshold,
+        },
+    )
+
+
+def apply_adaptive_type_penalties(
+    *,
+    qs: Any | None,
+    events_path: Path,
+    records: list[dict[str, Any]],
+    adaptive_type_failures: dict[str, int],
+    args: argparse.Namespace,
+    problem: str,
+    depth: int,
+    node_index: int,
+) -> list[dict[str, Any]]:
+  if (
+      qs is None
+      or not args.candidate_adaptive_type_penalty
+      or not adaptive_type_failures
+      or not records
+  ):
+    return records
+  threshold = max(1, int(args.candidate_adaptive_type_penalty_threshold))
+  weight = max(0.0, float(args.candidate_adaptive_type_penalty_weight))
+  max_penalty = max(0.0, float(args.candidate_adaptive_type_penalty_max))
+  applied = []
+  for record in records:
+    construction_type = candidate_type_key(record, qs)
+    failures = adaptive_type_failures.get(construction_type, 0)
+    penalty = adaptive_type_penalty(failures, threshold, weight, max_penalty)
+    if penalty <= 0:
+      continue
+    base_score = float(record.get("_candidate_rerank_score", record.get("score", 0.0)) or 0.0)
+    record["_candidate_base_rerank_score"] = base_score
+    record["_candidate_rerank_score"] = base_score - penalty
+    record["_candidate_adaptive_type_failures"] = failures
+    record["_candidate_adaptive_type_penalty"] = penalty
+    applied.append((construction_type, failures, penalty))
+  if not applied:
+    return records
+  ordered = sorted(
+      records,
+      key=lambda record: float(
+          record.get("_candidate_rerank_score", record.get("score", 0.0)) or 0.0
+      ),
+      reverse=True,
+  )
+  if hasattr(qs, "interleave_ranked_records_by_node"):
+    ordered = qs.interleave_ranked_records_by_node(ordered)
+  write_jsonl(
+      events_path,
+      {
+          "event": "candidate_adaptive_type_penalty_applied",
+          "problem": problem,
+          "depth": depth,
+          "node_index": node_index,
+          "top": [
+              {
+                  "construction_type": typ,
+                  "failures": failures,
+                  "penalty": round(penalty, 4),
+              }
+              for typ, failures, penalty in sorted(
+                  applied, key=lambda item: (-item[2], -item[1], item[0])
+              )[:8]
+          ],
+      },
+  )
+  return ordered
+
+
+def candidate_records_from_raws(
+    raw_scores: list[tuple[str, float]],
+    graph: gh.Graph,
+    args: argparse.Namespace,
+    qs: Any | None,
+    source: str,
+    start_rank: int = 0,
+) -> list[dict[str, Any]]:
+  forbidden_points = qs.existing_point_names(graph) if qs is not None else set()
+  records = []
+  for offset, (raw_in, score) in enumerate(raw_scores):
+    raw = raw_in.strip()
+    original_raw = raw
+    repaired = False
+    if qs is not None and args.candidate_point_repair:
+      repaired_raw = qs.repair_candidate_point_name(raw, forbidden_points)
+      repaired = repaired_raw != raw
+      raw = repaired_raw
+    if (
+        qs is not None
+        and args.candidate_point_mask
+        and not args.candidate_point_repair
+        and not qs.candidate_passes_point_mask(raw, forbidden_points)
+    ):
+      translation = "ERROR: point already exists"
+    else:
+      translation = translate_candidate(raw, graph, qs)
     records.append({
-        "rank": rank,
-        "lm_out": lm_out,
+        "rank": start_rank + offset,
+        "lm_out": raw,
+        "raw": raw,
+        "original_lm_out": original_raw,
         "translation": translation,
         "score": float(score),
+        "lm_score": float(score),
+        "source": source,
+        "point_repaired": repaired,
     })
   return records
+
+
+def candidate_records(
+    outputs: dict[str, Any],
+    graph: gh.Graph,
+    args: argparse.Namespace,
+    qs: Any | None,
+) -> list[dict[str, Any]]:
+  raw_scores = [
+      (lm_out, float(score))
+      for lm_out, score in reversed(list(zip(outputs["seqs_str"], outputs["scores"])))
+  ]
+  return candidate_records_from_raws(raw_scores, graph, args, qs, "ag1_lm")
+
+
+def add_template_backfill_records(
+    *,
+    records: list[dict[str, Any]],
+    graph: gh.Graph,
+    p_cur: pr.Problem,
+    args: argparse.Namespace,
+    qs: Any | None,
+) -> list[dict[str, Any]]:
+  if (
+      qs is None
+      or not hasattr(qs, "template_backfill_candidates")
+      or not args.candidate_template_backfill
+      or args.candidate_template_backfill_extra_slots <= 0
+  ):
+    return records
+  point_names = qs.existing_point_names(graph)
+  excluded = set()
+  if args.candidate_canonical_dedup:
+    for record in records:
+      translation = str(record.get("translation") or "")
+      if translation and not translation.startswith("ERROR:"):
+        try:
+          excluded.add(qs.canonical_aux_key(translation))
+        except Exception:  # pylint: disable=broad-except
+          pass
+  preferred_types = [
+      qs.construction_type_key(str(record.get("translation") or ""))
+      for record in records
+      if str(record.get("translation") or "") and not str(record.get("translation")).startswith("ERROR:")
+  ]
+  raw_templates = qs.template_backfill_candidates(
+      point_names,
+      int(args.candidate_template_backfill_extra_slots),
+      excluded if excluded else None,
+      qs.goal_point_names(p_cur),
+      preferred_types,
+  )
+  if not raw_templates:
+    return records
+  min_score = min([float(record.get("score", 0.0) or 0.0) for record in records] or [0.0])
+  template_records = candidate_records_from_raws(
+      [(raw, min_score - 5.0) for raw in raw_templates],
+      graph,
+      args,
+      qs,
+      "template_backfill",
+      start_rank=len(records),
+  )
+  return records + template_records
+
+
+def select_node_candidates_for_eval(
+    records: list[dict[str, Any]],
+    args: argparse.Namespace,
+    qs: Any | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+  limit = max(0, int(args.candidate_node_eval_limit or 0))
+  type_cap = max(0, int(args.candidate_node_type_eval_cap or 0))
+  if limit <= 0 and type_cap <= 0:
+    return records, []
+  selected = []
+  pruned = []
+  type_counts: dict[str, int] = {}
+  for record in records:
+    type_key = candidate_type_key(record, qs)
+    if type_cap > 0 and type_counts.get(type_key, 0) >= type_cap:
+      pruned_record = dict(record)
+      pruned_record["_candidate_prune_reason"] = "node_type_cap"
+      pruned.append(pruned_record)
+      continue
+    if limit > 0 and len(selected) >= limit:
+      pruned_record = dict(record)
+      pruned_record["_candidate_prune_reason"] = "node_eval_limit"
+      pruned.append(pruned_record)
+      continue
+    selected.append(record)
+    type_counts[type_key] = type_counts.get(type_key, 0) + 1
+  return selected, pruned
 
 
 def run_ag_problem(
@@ -394,6 +797,7 @@ def run_ag_problem(
   beam_queue.add(node=(g, string, problem.txt()), val=0.0)
   lm_calls = 0
   candidates_checked = 0
+  adaptive_type_failures: dict[str, int] = {}
 
   for depth in range(args.search_depth):
     if timed_out():
@@ -410,15 +814,24 @@ def run_ag_problem(
     )
     new_queue = StableBeamQueue(max_size=args.beam_size)
     pending_candidates = []
+    depth_seen_candidate_keys: set[str] = set()
 
     for node_index, (prev_score, (g_prev, prompt, pstring)) in enumerate(beam_queue):
       if timed_out():
         break
 
+      p_cur = pr.Problem.from_txt(pstring, translate=False)
       decode_start = time.time()
       outputs = model.beam_decode(prompt, eos_tokens=[";"])
       lm_calls += 1
-      records = candidate_records(outputs, g_prev)
+      records = candidate_records(outputs, g_prev, args, qs)
+      records = add_template_backfill_records(
+          records=records,
+          graph=g_prev,
+          p_cur=p_cur,
+          args=args,
+          qs=qs,
+      )
       write_jsonl(
           events_path,
           {
@@ -429,20 +842,71 @@ def run_ag_problem(
               "elapsed_sec": time.time() - decode_start,
               "top_translation": records[0]["translation"] if records else "",
               "top_score": records[0]["score"] if records else None,
+              "candidate_count_raw": len(records),
           },
       )
 
       valid = []
+      seen_node_keys: set[str] = set()
       for record in records:
         if record["translation"].startswith("ERROR:"):
+          note_adaptive_validation_failure(
+              qs=qs,
+              events_path=events_path,
+              adaptive_type_failures=adaptive_type_failures,
+              args=args,
+              problem=name,
+              depth=depth,
+              node_index=node_index,
+              record=record,
+          )
           continue
+        canonical_key = None
+        if qs is not None and (
+            args.candidate_canonical_dedup or args.candidate_depth_canonical_dedup
+        ):
+          try:
+            canonical_key = qs.canonical_aux_key(record["translation"])
+          except Exception:  # pylint: disable=broad-except
+            canonical_key = record["translation"]
+          if args.candidate_canonical_dedup and canonical_key in seen_node_keys:
+            write_jsonl(
+                events_path,
+                {
+                    "event": "candidate_filtered",
+                    "problem": name,
+                    "depth": depth,
+                    "node_index": node_index,
+                    "rank": record.get("rank"),
+                    "raw": record.get("raw"),
+                    "translation": record.get("translation"),
+                    "reason": "duplicate_node_canonical",
+                    "source": record.get("source"),
+                },
+            )
+            continue
+          if args.candidate_depth_canonical_dedup and canonical_key in depth_seen_candidate_keys:
+            write_jsonl(
+                events_path,
+                {
+                    "event": "candidate_filtered",
+                    "problem": name,
+                    "depth": depth,
+                    "node_index": node_index,
+                    "rank": record.get("rank"),
+                    "raw": record.get("raw"),
+                    "translation": record.get("translation"),
+                    "reason": "duplicate_depth_canonical",
+                    "source": record.get("source"),
+                },
+            )
+            continue
+          seen_node_keys.add(canonical_key)
+          depth_seen_candidate_keys.add(canonical_key)
         candidate_pstring = ag.insert_aux_to_premise(pstring, record["translation"])
         valid.append({
             **record,
-            "raw": record["lm_out"],
-            "lm_score": record["score"],
             "problem": name,
-            "source": "ag1_lm",
             "pstring": candidate_pstring,
         })
 
@@ -472,16 +936,56 @@ def run_ag_problem(
                     {
                         "rank": cand.get("rank"),
                         "translation": cand.get("translation"),
+                        "source": cand.get("source"),
+                        "point_repaired": cand.get("point_repaired"),
                         "ag1_score": cand.get("score"),
                         "rerank_score": cand.get("_candidate_rerank_score"),
+                        "base_rerank_score": cand.get("_candidate_base_rerank_score"),
+                        "adaptive_penalty": cand.get(
+                            "_candidate_adaptive_type_penalty"
+                        ),
                         "rerank_phase": cand.get("_candidate_rerank_phase"),
                     }
                     for cand in valid[:8]
                 ],
             },
         )
+        valid = apply_adaptive_type_penalties(
+            qs=qs,
+            events_path=events_path,
+            records=valid,
+            adaptive_type_failures=adaptive_type_failures,
+            args=args,
+            problem=name,
+            depth=depth,
+            node_index=node_index,
+        )
 
-      for cand in valid:
+      eval_valid, pruned_valid = select_node_candidates_for_eval(valid, args, qs)
+      for cand in pruned_valid:
+        write_jsonl(
+            events_path,
+            {
+                "event": "candidate_filtered",
+                "problem": name,
+                "depth": depth,
+                "node_index": node_index,
+                "rank": cand.get("rank"),
+                "raw": cand.get("raw"),
+                "translation": cand.get("translation"),
+                "reason": cand.get("_candidate_prune_reason"),
+                "source": cand.get("source"),
+                "candidate_rerank_score": cand.get("_candidate_rerank_score"),
+                "candidate_base_rerank_score": cand.get(
+                    "_candidate_base_rerank_score"
+                ),
+                "candidate_adaptive_type_penalty": cand.get(
+                    "_candidate_adaptive_type_penalty"
+                ),
+            },
+        )
+
+      for cand in eval_valid:
         candidates_checked += 1
         cand_dir = problem_dir / "candidates" / f"d{depth:02d}_n{node_index:04d}_r{cand['rank']:02d}"
         pending_candidates.append({
@@ -538,9 +1042,20 @@ def run_ag_problem(
     for item, result in cand_results:
       cand = item["candidate"]
       if result["error"]:
+        note_adaptive_ddar_failure(
+            qs=qs,
+            events_path=events_path,
+            adaptive_type_failures=adaptive_type_failures,
+            args=args,
+            problem=name,
+            depth=depth,
+            node_index=item["node_index"],
+            record=cand,
+            error=result["error"],
+        )
         write_jsonl(
-            events_path,
-            {
+          events_path,
+          {
                 "event": "candidate_error",
                 "problem": name,
                 "depth": depth,

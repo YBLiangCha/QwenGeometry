@@ -306,14 +306,23 @@ def run_ddar_worker_subprocess(
         check=False,
     )
   except subprocess.TimeoutExpired as exc:
+    def _timeout_stream_to_text(value: Any) -> str:
+      if value is None:
+        return ""
+      if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+      return str(value)
+
+    timeout_stdout = _timeout_stream_to_text(exc.stdout)
+    timeout_stderr = _timeout_stream_to_text(exc.stderr)
     with log_path.open("a", encoding="utf-8") as log:
       log.write(f"\nERROR\nDDAR subprocess timed out after {timeout_sec:.1f}s\n")
-      if exc.stdout:
+      if timeout_stdout:
         log.write("\nSTDOUT\n")
-        log.write(exc.stdout)
-      if exc.stderr:
+        log.write(timeout_stdout)
+      if timeout_stderr:
         log.write("\nSTDERR\n")
-        log.write(exc.stderr)
+        log.write(timeout_stderr)
     return {
         "problem": problem_name,
         "solved": False,

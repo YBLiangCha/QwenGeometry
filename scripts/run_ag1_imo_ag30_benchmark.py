@@ -56,6 +56,27 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--skip_initial_ddar", action="store_true")
   parser.add_argument("--problem_time_limit_sec", type=float, default=0.0)
   parser.add_argument("--keep_failed_candidate_logs", action="store_true")
+  parser.add_argument(
+      "--qwen_search_path",
+      default="",
+      help="Optional path containing qwen_ag_search.py for value reranking.",
+  )
+  parser.add_argument(
+      "--candidate_rerank",
+      choices=[
+          "none",
+          "heuristic_diverse",
+          "value_model",
+          "value_model_diverse",
+          "value_model_frontfill_diverse",
+          "value_model_frontfill_progress_diverse",
+      ],
+      default="none",
+  )
+  parser.add_argument("--candidate_value_model", default="")
+  parser.add_argument("--candidate_secondary_value_model", default="")
+  parser.add_argument("--candidate_frontfill_limit", type=int, default=8)
+  parser.add_argument("--candidate_static_progress_type_bonus", default="")
   return parser.parse_args()
 
 
@@ -170,6 +191,48 @@ def load_lm(args: argparse.Namespace):
       "jax_devices": [str(d) for d in jax.devices()],
       "lm_batch_size": model.batch_size,
   }
+
+
+def load_qwen_search(args: argparse.Namespace):
+  if args.candidate_rerank == "none":
+    return None
+  if args.qwen_search_path:
+    sys.path.insert(0, str(Path(args.qwen_search_path).resolve()))
+  import qwen_ag_search as qs  # pylint: disable=import-error,import-outside-toplevel
+
+  return qs
+
+
+def load_static_type_bonus(path: str) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
+  if not path:
+    return {}, {}
+  data = json.loads(Path(path).read_text(encoding="utf-8"))
+  if not isinstance(data, dict):
+    return {}, {}
+  type_bonus = data.get("type_bonus") if isinstance(data.get("type_bonus"), dict) else {}
+  per_problem = (
+      data.get("per_problem_type_bonus")
+      if isinstance(data.get("per_problem_type_bonus"), dict)
+      else {}
+  )
+  return (
+      {str(k): float(v) for k, v in type_bonus.items()},
+      {
+          str(problem): {str(k): float(v) for k, v in values.items()}
+          for problem, values in per_problem.items()
+          if isinstance(values, dict)
+      },
+  )
+
+
+def problem_type_bonus(
+    global_bonus: dict[str, float],
+    per_problem_bonus: dict[str, dict[str, float]],
+    problem_name: str,
+) -> dict[str, float]:
+  merged = dict(global_bonus)
+  merged.update(per_problem_bonus.get(problem_name, {}))
+  return merged
 
 
 def candidate_records(outputs: dict[str, Any], graph: gh.Graph) -> list[dict[str, Any]]:
@@ -294,7 +357,50 @@ def run_ag_problem(
         if record["translation"].startswith("ERROR:"):
           continue
         candidate_pstring = ag.insert_aux_to_premise(pstring, record["translation"])
-        valid.append({**record, "pstring": candidate_pstring})
+        valid.append({
+            **record,
+            "raw": record["lm_out"],
+            "lm_score": record["score"],
+            "problem": name,
+            "source": "ag1_lm",
+            "pstring": candidate_pstring,
+        })
+
+      qs = getattr(args, "_qwen_search", None)
+      if qs is not None and valid:
+        valid = qs.rerank_candidate_records(
+            valid,
+            args.candidate_rerank,
+            getattr(args, "_candidate_value_model", None),
+            getattr(args, "_candidate_secondary_value_model", None),
+            args.candidate_frontfill_limit,
+            problem_type_bonus(
+                getattr(args, "_candidate_static_type_bonus", {}),
+                getattr(args, "_candidate_static_type_bonus_by_problem", {}),
+                name,
+            ),
+        )
+        write_jsonl(
+            events_path,
+            {
+                "event": "candidate_rerank",
+                "problem": name,
+                "depth": depth,
+                "node_index": node_index,
+                "strategy": args.candidate_rerank,
+                "candidate_count": len(valid),
+                "top": [
+                    {
+                        "rank": cand.get("rank"),
+                        "translation": cand.get("translation"),
+                        "ag1_score": cand.get("score"),
+                        "rerank_score": cand.get("_candidate_rerank_score"),
+                        "rerank_phase": cand.get("_candidate_rerank_phase"),
+                    }
+                    for cand in valid[:8]
+                ],
+            },
+        )
 
       for cand in valid:
         candidates_checked += 1
@@ -373,7 +479,8 @@ def run_ag_problem(
               item["prompt"] + " " + cand["lm_out"] + " x00",
               cand["pstring"],
           ),
-          val=item["prev_score"] + cand["score"],
+          val=item["prev_score"]
+          + float(cand.get("_candidate_rerank_score", cand["score"]) or 0.0),
       )
 
     beam_queue = new_queue
@@ -412,6 +519,8 @@ def main() -> int:
   args.ckpt_path = str(Path(args.ckpt_path).resolve())
   args.vocab_path = str(Path(args.vocab_path).resolve())
   args.meliad_path = str(Path(args.meliad_path).resolve())
+  if args.qwen_search_path:
+    args.qwen_search_path = str(Path(args.qwen_search_path).resolve())
 
   results_dir = Path(args.results_dir).resolve()
   proofs_dir = results_dir / "proofs"
@@ -425,6 +534,23 @@ def main() -> int:
 
   ag.DEFINITIONS = pr.Definition.from_txt_file(args.defs_file, to_dict=True)
   ag.RULES = pr.Theorem.from_txt_file(args.rules_file, to_dict=True)
+  args._qwen_search = load_qwen_search(args)
+  args._candidate_value_model = (
+      args._qwen_search.load_candidate_value_model(args.candidate_value_model)
+      if args._qwen_search is not None
+      else None
+  )
+  args._candidate_secondary_value_model = (
+      args._qwen_search.load_candidate_value_model(
+          args.candidate_secondary_value_model
+      )
+      if args._qwen_search is not None
+      else None
+  )
+  (
+      args._candidate_static_type_bonus,
+      args._candidate_static_type_bonus_by_problem,
+  ) = load_static_type_bonus(args.candidate_static_progress_type_bonus)
 
   problems_ddar = pr.Problem.from_txt_file(args.problems_file, to_dict=True, translate=False)
   problems_ag = pr.Problem.from_txt_file(args.problems_file, to_dict=True, translate=True)
@@ -443,6 +569,10 @@ def main() -> int:
           "beam_size": args.beam_size,
           "search_depth": args.search_depth,
           "workers": args.workers,
+          "candidate_rerank": args.candidate_rerank,
+          "candidate_value_model": args.candidate_value_model,
+          "candidate_secondary_value_model": args.candidate_secondary_value_model,
+          "candidate_static_progress_type_bonus": args.candidate_static_progress_type_bonus,
       },
   )
 

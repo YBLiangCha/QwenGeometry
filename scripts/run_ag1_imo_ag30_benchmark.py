@@ -13,8 +13,8 @@ import math
 import multiprocessing as mp
 import os
 from pathlib import Path
-import signal
 import shutil
+import subprocess
 import sys
 import time
 import traceback
@@ -29,6 +29,10 @@ import alphageometry as ag
 import graph as gh
 import pretty as pt
 import problem as pr
+
+
+_WORKER_DEFS_FILE = ""
+_WORKER_RULES_FILE = ""
 
 
 class StableBeamQueue:
@@ -214,19 +218,21 @@ def raw_problem_texts(problems_file: str) -> dict[str, str]:
 
 
 def worker_init(defs_file: str, rules_file: str) -> None:
+  global _WORKER_DEFS_FILE, _WORKER_RULES_FILE
+  _WORKER_DEFS_FILE = defs_file
+  _WORKER_RULES_FILE = rules_file
   ensure_absl_flags_parsed()
   ag.DEFINITIONS = pr.Definition.from_txt_file(defs_file, to_dict=True)
   ag.RULES = pr.Theorem.from_txt_file(rules_file, to_dict=True)
   absl_logging.set_verbosity(absl_logging.ERROR)
 
 
-def run_ddar_worker(
+def run_ddar_worker_impl(
     problem_name: str,
     pstring: str,
     out_file: str,
     log_file: str,
     keep_failed_log: bool,
-    timeout_sec: float = 0.0,
 ) -> dict[str, Any]:
   start = time.time()
   log_path = Path(log_file)
@@ -237,20 +243,7 @@ def run_ddar_worker(
     g, _ = gh.Graph.build_problem(p, ag.DEFINITIONS)
     with log_path.open("w", encoding="utf-8") as log:
       with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
-        old_handler = None
-        if timeout_sec > 0 and hasattr(signal, "SIGALRM"):
-          def _timeout_handler(signum, frame):  # pylint: disable=unused-argument
-            raise TimeoutError(f"DDAR timed out after {timeout_sec:.1f}s")
-
-          old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-          signal.setitimer(signal.ITIMER_REAL, timeout_sec)
-        try:
-          solved = ag.run_ddar(g, p, out_file)
-        finally:
-          if timeout_sec > 0 and hasattr(signal, "SIGALRM"):
-            signal.setitimer(signal.ITIMER_REAL, 0)
-            if old_handler is not None:
-              signal.signal(signal.SIGALRM, old_handler)
+        solved = ag.run_ddar(g, p, out_file)
     if not solved and not keep_failed_log:
       with contextlib.suppress(FileNotFoundError):
         log_path.unlink()
@@ -274,6 +267,134 @@ def run_ddar_worker(
         "log_file": str(log_path),
         "error": repr(exc),
     }
+
+
+def run_ddar_worker_subprocess(
+    problem_name: str,
+    pstring: str,
+    out_file: str,
+    log_file: str,
+    keep_failed_log: bool,
+    timeout_sec: float,
+) -> dict[str, Any]:
+  start = time.time()
+  log_path = Path(log_file)
+  log_path.parent.mkdir(parents=True, exist_ok=True)
+  spec_path = log_path.parent / "ddar_worker_spec.json"
+  result_path = log_path.parent / "ddar_worker_result.json"
+  spec = {
+      "problem_name": problem_name,
+      "pstring": pstring,
+      "out_file": out_file,
+      "log_file": log_file,
+      "keep_failed_log": keep_failed_log,
+      "defs_file": _WORKER_DEFS_FILE,
+      "rules_file": _WORKER_RULES_FILE,
+  }
+  spec_path.write_text(json.dumps(spec), encoding="utf-8")
+  with contextlib.suppress(FileNotFoundError):
+    result_path.unlink()
+
+  cmd = [sys.executable, str(Path(__file__).resolve()), "--_ddar_worker_json", str(spec_path), str(result_path)]
+  try:
+    completed = subprocess.run(
+        cmd,
+        cwd=str(Path.cwd()),
+        text=True,
+        capture_output=True,
+        timeout=timeout_sec,
+        check=False,
+    )
+  except subprocess.TimeoutExpired as exc:
+    with log_path.open("a", encoding="utf-8") as log:
+      log.write(f"\nERROR\nDDAR subprocess timed out after {timeout_sec:.1f}s\n")
+      if exc.stdout:
+        log.write("\nSTDOUT\n")
+        log.write(exc.stdout)
+      if exc.stderr:
+        log.write("\nSTDERR\n")
+        log.write(exc.stderr)
+    return {
+        "problem": problem_name,
+        "solved": False,
+        "elapsed_sec": time.time() - start,
+        "out_file": "",
+        "log_file": str(log_path),
+        "error": f"TimeoutError('DDAR subprocess timed out after {timeout_sec:.1f}s')",
+    }
+
+  if completed.stdout or completed.stderr:
+    with log_path.open("a", encoding="utf-8") as log:
+      if completed.stdout:
+        log.write("\nSUBPROCESS_STDOUT\n")
+        log.write(completed.stdout)
+      if completed.stderr:
+        log.write("\nSUBPROCESS_STDERR\n")
+        log.write(completed.stderr)
+
+  if result_path.exists():
+    try:
+      result = json.loads(result_path.read_text(encoding="utf-8"))
+      result["elapsed_sec"] = time.time() - start
+      return result
+    except Exception as exc:  # pylint: disable=broad-except
+      error = f"result_read_error: {exc!r}"
+  else:
+    error = f"missing_result_json returncode={completed.returncode}"
+
+  return {
+      "problem": problem_name,
+      "solved": False,
+      "elapsed_sec": time.time() - start,
+      "out_file": "",
+      "log_file": str(log_path),
+      "error": error,
+  }
+
+
+def run_ddar_worker(
+    problem_name: str,
+    pstring: str,
+    out_file: str,
+    log_file: str,
+    keep_failed_log: bool,
+    timeout_sec: float = 0.0,
+) -> dict[str, Any]:
+  if timeout_sec > 0:
+    return run_ddar_worker_subprocess(
+        problem_name,
+        pstring,
+        out_file,
+        log_file,
+        keep_failed_log,
+        timeout_sec,
+    )
+  return run_ddar_worker_impl(
+      problem_name,
+      pstring,
+      out_file,
+      log_file,
+      keep_failed_log,
+  )
+
+
+def maybe_run_ddar_worker_json() -> bool:
+  if "--_ddar_worker_json" not in sys.argv:
+    return False
+  idx = sys.argv.index("--_ddar_worker_json")
+  spec_path = Path(sys.argv[idx + 1])
+  result_path = Path(sys.argv[idx + 2])
+  spec = json.loads(spec_path.read_text(encoding="utf-8"))
+  worker_init(spec["defs_file"], spec["rules_file"])
+  result = run_ddar_worker_impl(
+      spec["problem_name"],
+      spec["pstring"],
+      spec["out_file"],
+      spec["log_file"],
+      bool(spec["keep_failed_log"]),
+  )
+  result_path.write_text(json.dumps(result, sort_keys=True), encoding="utf-8")
+  return True
 
 
 def submit_ddar(
@@ -1283,4 +1404,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+  if maybe_run_ddar_worker_json():
+    sys.exit(0)
   sys.exit(main())
